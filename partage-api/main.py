@@ -8,7 +8,7 @@ import os
 import secrets
 import uuid
 from contextlib import asynccontextmanager, contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Literal, Optional
 
 import jwt
@@ -124,6 +124,9 @@ def initialize_database() -> None:
                 details jsonb NOT NULL DEFAULT '{}'::jsonb,
                 created_at timestamptz NOT NULL DEFAULT now()
             );
+
+            ALTER TABLE schedules DROP CONSTRAINT IF EXISTS schedules_doctor_code_fkey;
+            ALTER TABLE duty_overrides DROP CONSTRAINT IF EXISTS duty_overrides_doctor_code_fkey;
             """
         )
         bootstrap_admin(connection)
@@ -204,6 +207,31 @@ class SwapDecision(BaseModel):
     decision: Literal["accepted", "declined"]
 
 
+class UserUpsert(BaseModel):
+    code: str = Field(min_length=1, max_length=20)
+    full_name: str = Field(min_length=2, max_length=150)
+    email: str = Field(min_length=3, max_length=254)
+    phone: str = Field(default="", max_length=40)
+    role: Literal["admin", "intensiviste"] = "intensiviste"
+    active: bool = True
+    password: Optional[str] = Field(default=None, min_length=12, max_length=200)
+
+
+class ScheduleAssignment(BaseModel):
+    task: str = Field(min_length=1, max_length=100)
+    code: str = Field(min_length=1, max_length=20)
+
+
+class ScheduleWeek(BaseModel):
+    weekNumber: int = Field(ge=1, le=53)
+    weekStart: date
+    assignments: list[ScheduleAssignment]
+
+
+class ScheduleReplace(BaseModel):
+    weeks: list[ScheduleWeek]
+
+
 def issue_token(user: dict) -> str:
     if not JWT_SECRET:
         raise RuntimeError("JWT_SECRET n'est pas configure")
@@ -235,6 +263,11 @@ def current_user(authorization: Annotated[Optional[str], Header()] = None) -> di
 CurrentUser = Annotated[dict, Depends(current_user)]
 
 
+def require_admin(user: dict) -> None:
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Reserve a l'administrateur")
+
+
 def public_user(user: dict) -> dict:
     return {key: user[key] for key in ("code", "full_name", "email", "phone", "role", "active")}
 
@@ -245,6 +278,54 @@ def assignment_code(value: Optional[dict]) -> str:
 
 def assignment_is_none(value: Optional[dict]) -> bool:
     return not value or bool(value.get("none"))
+
+
+def validate_assignment(connection, assignment: Optional[dict], user: dict, allow_past: bool = False) -> None:
+    if assignment_is_none(assignment):
+        return
+    year = assignment.get("year")
+    week_number = assignment.get("weekNumber")
+    code = assignment_code(assignment)
+    week = connection.execute(
+        "SELECT min(week_start) AS week_start FROM schedules WHERE year = %s AND week_number = %s",
+        (year, week_number),
+    ).fetchone()
+    if not week or not week["week_start"]:
+        raise HTTPException(status_code=409, detail="Cette semaine n'existe plus dans l'horaire")
+    if not allow_past and user["role"] != "admin" and week["week_start"] + timedelta(days=6) < date.today():
+        raise HTTPException(status_code=403, detail="Les semaines passees ne sont pas echangeables")
+    if assignment.get("scope") == "individual":
+        if assignment.get("dutyId") is None or assignment.get("dayIndex") is None:
+            raise HTTPException(status_code=400, detail="Garde individuelle incomplete")
+        override = connection.execute(
+            """
+            SELECT doctor_code FROM duty_overrides
+            WHERE year = %s AND week_number = %s AND duty_id = %s AND day_index = %s
+            """,
+            (year, week_number, assignment["dutyId"], assignment["dayIndex"]),
+        ).fetchone()
+        if override and override["doctor_code"] != code:
+            raise HTTPException(status_code=409, detail="Cette garde a deja ete modifiee")
+    exists = connection.execute(
+        """
+        SELECT 1 FROM schedules
+        WHERE year = %s AND week_number = %s AND doctor_code = %s
+        LIMIT 1
+        """,
+        (year, week_number, code),
+    ).fetchone()
+    if not exists and not (
+        assignment.get("scope") == "individual"
+        and connection.execute(
+            """
+            SELECT 1 FROM duty_overrides
+            WHERE year = %s AND week_number = %s AND duty_id = %s
+              AND day_index = %s AND doctor_code = %s
+            """,
+            (year, week_number, assignment.get("dutyId"), assignment.get("dayIndex"), code),
+        ).fetchone()
+    ):
+        raise HTTPException(status_code=409, detail="Cette affectation n'appartient plus a cet utilisateur")
 
 
 def audit(connection, actor: str, action: str, entity_type: str, entity_id: str, details: dict) -> None:
@@ -360,12 +441,55 @@ def me(user: CurrentUser) -> dict:
 
 @app.get("/api/users", response_model=list[UserResponse])
 def users(user: CurrentUser) -> list[dict]:
-    del user
     with database() as connection:
-        rows = connection.execute(
-            "SELECT code, full_name, email, phone, role, active FROM users WHERE active = true ORDER BY full_name"
-        ).fetchall()
-    return [public_user(row) for row in rows]
+        if user["role"] == "admin":
+            rows = connection.execute(
+                "SELECT code, full_name, email, phone, role, active FROM users ORDER BY full_name"
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                "SELECT code, full_name, email, phone, role, active FROM users WHERE active = true ORDER BY full_name"
+            ).fetchall()
+    if user["role"] == "admin":
+        return [public_user(row) for row in rows]
+    return [
+        {**public_user(row), "email": "", "phone": ""}
+        for row in rows
+    ]
+
+
+@app.post("/api/admin/users", response_model=UserResponse)
+def save_user(payload: UserUpsert, user: CurrentUser) -> dict:
+    require_admin(user)
+    code = payload.code.strip().upper()
+    email = payload.email.strip().lower()
+    with database() as connection:
+        existing = connection.execute("SELECT * FROM users WHERE code = %s", (code,)).fetchone()
+        if not existing and not payload.password:
+            raise HTTPException(status_code=400, detail="Un mot de passe initial est requis")
+        password_hash = hash_password(payload.password) if payload.password else existing["password_hash"]
+        try:
+            saved = connection.execute(
+                """
+                INSERT INTO users (code, full_name, email, phone, role, active, password_hash)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (code) DO UPDATE SET
+                    full_name = EXCLUDED.full_name,
+                    email = EXCLUDED.email,
+                    phone = EXCLUDED.phone,
+                    role = EXCLUDED.role,
+                    active = EXCLUDED.active,
+                    password_hash = EXCLUDED.password_hash,
+                    updated_at = now()
+                RETURNING code, full_name, email, phone, role, active
+                """,
+                (code, payload.full_name.strip(), email, payload.phone.strip(), payload.role, payload.active, password_hash),
+            ).fetchone()
+        except psycopg.errors.UniqueViolation as error:
+            raise HTTPException(status_code=409, detail="Ce courriel est deja utilise") from error
+        audit(connection, user["code"], "user.saved", "user", code, {"role": payload.role, "active": payload.active})
+        connection.commit()
+    return public_user(saved)
 
 
 @app.get("/api/schedules")
@@ -389,6 +513,31 @@ def schedules(user: CurrentUser, year: int = Query(ge=2020, le=2100)) -> dict:
     return {"schedules": weeks, "overrides": overrides}
 
 
+@app.post("/api/admin/schedules/{year}")
+def replace_schedule(year: int, payload: ScheduleReplace, user: CurrentUser) -> dict:
+    require_admin(user)
+    if year < 2020 or year > 2100:
+        raise HTTPException(status_code=400, detail="Annee invalide")
+    with database() as connection:
+        connection.execute("DELETE FROM duty_overrides WHERE year = %s", (year,))
+        connection.execute("DELETE FROM swap_requests WHERE requested->>'year' = %s", (str(year),))
+        connection.execute("DELETE FROM schedules WHERE year = %s", (year,))
+        inserted = 0
+        for week in payload.weeks:
+            for assignment in week.assignments:
+                connection.execute(
+                    """
+                    INSERT INTO schedules (year, week_number, week_start, task, doctor_code)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (year, week.weekNumber, week.weekStart, assignment.task, assignment.code.strip().upper()),
+                )
+                inserted += 1
+        audit(connection, user["code"], "schedule.replaced", "schedule", str(year), {"weeks": len(payload.weeks), "assignments": inserted})
+        connection.commit()
+    return {"year": year, "weeks": len(payload.weeks), "assignments": inserted}
+
+
 @app.post("/api/swaps", status_code=status.HTTP_201_CREATED)
 def create_swap(payload: SwapCreate, user: CurrentUser) -> dict:
     offered = payload.offered.model_dump() if payload.offered else None
@@ -399,6 +548,8 @@ def create_swap(payload: SwapCreate, user: CurrentUser) -> dict:
         raise HTTPException(status_code=400, detail="Cette garde vous appartient deja")
     request_id = uuid.uuid4()
     with database() as connection:
+        validate_assignment(connection, offered, user)
+        validate_assignment(connection, requested, user)
         connection.execute(
             """
             INSERT INTO swap_requests (id, requester_code, scope, offered, requested, message, status)
@@ -409,6 +560,38 @@ def create_swap(payload: SwapCreate, user: CurrentUser) -> dict:
         audit(connection, user["code"], "swap.requested", "swap_request", str(request_id), {"offered": offered, "requested": requested})
         connection.commit()
     return {"id": str(request_id), "status": "pending"}
+
+
+@app.post("/api/admin/swaps/direct", status_code=status.HTTP_201_CREATED)
+def direct_swap(payload: SwapCreate, user: CurrentUser) -> dict:
+    require_admin(user)
+    offered = payload.offered.model_dump() if payload.offered else None
+    requested = payload.requested.model_dump()
+    request_id = uuid.uuid4()
+    request = {
+        "requester_code": user["code"],
+        "scope": payload.scope,
+        "offered": offered,
+        "requested": requested,
+    }
+    with database() as connection:
+        validate_assignment(connection, offered, user, allow_past=True)
+        validate_assignment(connection, requested, user, allow_past=True)
+        if payload.scope == "weekly":
+            apply_weekly_swap(connection, request)
+        else:
+            apply_individual_swap(connection, request)
+        connection.execute(
+            """
+            INSERT INTO swap_requests
+                (id, requester_code, scope, offered, requested, message, status, responded_at, responded_by)
+            VALUES (%s, %s, %s, %s, %s, %s, 'accepted', now(), %s)
+            """,
+            (request_id, user["code"], payload.scope, Jsonb(offered) if offered else None, Jsonb(requested), payload.message, user["code"]),
+        )
+        audit(connection, user["code"], "swap.direct", "swap_request", str(request_id), {"offered": offered, "requested": requested})
+        connection.commit()
+    return {"id": str(request_id), "status": "accepted"}
 
 
 @app.get("/api/swaps")
@@ -442,6 +625,8 @@ def decide_swap(request_id: uuid.UUID, payload: SwapDecision, user: CurrentUser)
         if user["role"] != "admin" and user["code"] != requested_owner:
             raise HTTPException(status_code=403, detail="Vous ne pouvez pas traiter cette demande")
         if payload.decision == "accepted":
+            validate_assignment(connection, request["offered"], user, allow_past=user["role"] == "admin")
+            validate_assignment(connection, request["requested"], user, allow_past=user["role"] == "admin")
             if request["scope"] == "weekly":
                 apply_weekly_swap(connection, request)
             else:

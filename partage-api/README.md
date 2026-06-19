@@ -22,11 +22,15 @@ de passe n'est enregistré que sous forme de dérivé `PBKDF2-SHA256` salé.
 - `POST /api/auth/login`: ouverture de session;
 - `GET /api/me`: utilisateur connecté;
 - `GET /api/users`: utilisateurs actifs;
+- `POST /api/admin/users`: création et modification des comptes;
 - `GET /api/schedules?year=2026`: horaire partagé;
+- `POST /api/admin/schedules/{year}`: publication d'un horaire annuel;
 - `GET|POST /api/swaps`: demandes d'échange;
+- `POST /api/admin/swaps/direct`: échange administratif immédiat;
 - `POST /api/swaps/{id}/decision`: acceptation ou refus;
 - `GET /api/audit`: journal réservé à l'administrateur.
 
 La documentation interactive est disponible à `/docs` sur le service Render.
-L'import initial des horaires et le branchement du frontend seront ajoutés à la
-prochaine étape; ne pas saisir de données réelles avant ces validations.
+Le frontend de production autorisé est
+`https://gestion-horaire-usi-hej.onrender.com`. Les valeurs secrètes demeurent
+uniquement dans les variables d'environnement Render.
