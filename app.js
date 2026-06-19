@@ -87,6 +87,7 @@ let state = loadState();
 let swapFilter = "incoming";
 let activeSwapScope = "individual";
 let lockedRequestedKey = "";
+let lockedOfferedKey = "";
 let selectedWeekFilter = "next4";
 let userAdminMode = "edit";
 let requestedSwapEntries = [];
@@ -1203,6 +1204,7 @@ function canApproveRequest(request) {
 function populateSwapOptions(selectedKey = "", scope = activeSwapScope, requestedLockKey = "", offeredFirst = false) {
   activeSwapScope = scope;
   lockedRequestedKey = requestedLockKey;
+  lockedOfferedKey = selectedKey;
   setSwapFieldOrder(offeredFirst);
   document.getElementById("swap-dialog-title").textContent = scope === "weekly" ? "Échanger toutes les tâches" : "Échanger une garde";
   document.getElementById("offered-field-label").textContent = scope === "weekly" ? "Ma semaine offerte" : "Ma garde offerte";
@@ -1298,7 +1300,8 @@ function populateRequestedWeekOptions() {
   });
   const sortedWeeks = Array.from(weeks, ([key, entry]) => ({ key, entry }))
     .sort((left, right) => Number(left.entry.year || state.activeYear) - Number(right.entry.year || state.activeYear) || Number(left.entry.weekNumber) - Number(right.entry.weekNumber));
-  requestedWeek.innerHTML = `<option value="">Choisir une semaine</option>${sortedWeeks.map(({ key, entry }) =>
+  const noReturnOption = lockedOfferedKey ? '<option value="__none__">Aucun · rien demandé en retour</option>' : "";
+  requestedWeek.innerHTML = `<option value="">Choisir une semaine</option>${noReturnOption}${sortedWeeks.map(({ key, entry }) =>
     `<option value="${escapeHtml(key)}">${entry.year || state.activeYear} · Semaine ${entry.weekNumber} · semaine du ${escapeHtml(entry.weekDate || entry.date || "")}</option>`
   ).join("")}`;
   requestedWeek.disabled = !code;
@@ -1307,6 +1310,11 @@ function populateRequestedWeekOptions() {
 }
 
 function populateRequestedTaskOptions() {
+  if (requestedWeek.value === "__none__") {
+    requestedAssignment.innerHTML = '<option value="__none__">Aucun</option>';
+    requestedAssignment.disabled = true;
+    return;
+  }
   const [year, weekNumber] = requestedWeek.value.split("|");
   const entries = requestedSwapEntries.filter((entry) => entry.code === requestedDoctor.value
     && Number(entry.year || state.activeYear) === Number(year)
@@ -1393,9 +1401,13 @@ async function createSwapRequest(event) {
   event.preventDefault();
   const submitButton = event.submitter || swapForm.querySelector('button[type="submit"]');
   const offered = offeredAssignment.value ? findAssignment(offeredAssignment.value) : null;
-  const requested = findAssignment(lockedRequestedKey || requestedAssignment.value);
-  if (!requested) return;
-  if (!canExchangeEntry(requested) || (offered && !canExchangeEntry(offered))) {
+  const giveAwayWithoutReturn = Boolean(lockedOfferedKey && requestedDoctor.value && requestedWeek.value === "__none__");
+  const requested = giveAwayWithoutReturn ? null : findAssignment(lockedRequestedKey || requestedAssignment.value);
+  if (!requested && !giveAwayWithoutReturn) {
+    showToast("Sélectionnez la garde demandée ou le choix Aucun.");
+    return;
+  }
+  if ((requested && !canExchangeEntry(requested)) || (offered && !canExchangeEntry(offered))) {
     showToast("Les échanges de semaines ou gardes passées sont réservés à l'administrateur.");
     return;
   }
@@ -1403,12 +1415,14 @@ async function createSwapRequest(event) {
     showToast("Vous ne pouvez offrir que vos propres gardes.");
     return;
   }
-  if (requested.code === CURRENT_USER && !offered) {
+  if (requested?.code === CURRENT_USER && !offered) {
     showToast("Cette garde vous appartient déjà.");
     return;
   }
   const offeredPicked = offered ? pickAssignment(offered) : noOfferAssignment(activeSwapScope);
-  const requestedPicked = pickAssignment(requested);
+  const requestedPicked = giveAwayWithoutReturn
+    ? noRequestedAssignment(activeSwapScope, requestedDoctor.value, offeredPicked)
+    : pickAssignment(requested);
   if (!confirm(swapConfirmationText(offeredPicked, requestedPicked))) return;
   submitButton.disabled = true;
   submitButton.textContent = "Envoi en cours...";
@@ -1822,6 +1836,17 @@ function pickAssignment(entry) {
   return { scope: "individual", year: entry.year || state.activeYear, weekNumber: entry.weekNumber, date: entry.date, weekDate: entry.weekDate || entry.date, dayDate: entry.dayDate, dayIndex: entry.dayIndex, dutyId: entry.dutyId, task: entry.task, sourceTask: entry.sourceTask, code: entry.code };
 }
 function noOfferAssignment(scope = activeSwapScope) { return { scope, none: true, task: "Aucune garde offerte" }; }
+function noRequestedAssignment(scope, targetCode, offered) {
+  return {
+    scope,
+    none: true,
+    task: "Aucune garde demandée",
+    code: targetCode,
+    year: offered.year || state.activeYear,
+    weekNumber: offered.weekNumber,
+    weekDate: offered.weekDate || offered.date || "",
+  };
+}
 function isNoOffer(entry) { return !entry || entry.none === true; }
 function statusLabel(status) { return ({ pending: "Demandée", accepted: "Acceptée", declined: "Refusée" })[status] || status; }
 function emptyCard(message) { return `<div class="empty-card">${escapeHtml(message)}</div>`; }
@@ -1873,6 +1898,9 @@ function requestAuditBefore(request) {
 function requestAuditAfter(request) {
   if (isNoOffer(request.offered)) {
     return `Attribué à ${doctorName(request.requester || CURRENT_USER)} : ${plainSwapEntryLabel(request.requested)}`;
+  }
+  if (isNoOffer(request.requested)) {
+    return `Attribué à ${doctorName(request.requested.code)} : ${plainSwapEntryLabel(request.offered)}`;
   }
   return `Échange appliqué : ${doctorName(request.offered.code)} ⇄ ${doctorName(request.requested.code)}`;
 }
@@ -2025,7 +2053,7 @@ function clearWeeklyOverrides(entry) {
 }
 
 function swapEntryLabel(entry) {
-  if (isNoOffer(entry)) return "Aucune garde offerte";
+  if (isNoOffer(entry)) return escapeHtml(entry?.task || "Aucune garde offerte");
   if (entry.scope === "weekly") {
     return `${entry.year || state.activeYear} · Semaine ${entry.weekNumber} · semaine du ${escapeHtml(entry.weekDate || "")} · ${escapeHtml(weeklyTaskSummary(entry))} · Toutes les tâches de ${escapeHtml(entry.doctor || doctorName(entry.code))} (${entry.cellCount || 0})`;
   }
@@ -2033,7 +2061,7 @@ function swapEntryLabel(entry) {
 }
 
 function plainSwapEntryLabel(entry) {
-  if (isNoOffer(entry)) return "Aucune garde offerte";
+  if (isNoOffer(entry)) return entry?.task || "Aucune garde offerte";
   if (entry.scope === "weekly") {
     return `${entry.year || state.activeYear} · Semaine ${entry.weekNumber} · semaine du ${entry.weekDate || ""} · ${weeklyTaskSummary(entry)} · ${doctorName(entry.code)}`;
   }
