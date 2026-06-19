@@ -350,6 +350,15 @@ def apply_weekly_swap(connection, request: dict) -> None:
         )
         return
     offered_code = assignment_code(offered)
+    if assignment_is_none(requested):
+        connection.execute(
+            """
+            UPDATE schedules SET doctor_code = %s, modified_by_swap = true, updated_at = now()
+            WHERE year = %s AND week_number = %s AND doctor_code = %s
+            """,
+            (requested_code, offered["year"], offered["weekNumber"], offered_code),
+        )
+        return
     same_week = (
         offered["year"] == requested["year"]
         and offered["weekNumber"] == requested["weekNumber"]
@@ -415,6 +424,9 @@ def apply_individual_swap(connection, request: dict) -> None:
     requested = request["requested"]
     requester = request["requester_code"]
     requested_code = assignment_code(requested)
+    if assignment_is_none(requested):
+        upsert_override(connection, offered, requested_code)
+        return
     upsert_override(connection, requested, requester if assignment_is_none(offered) else assignment_code(offered))
     if not assignment_is_none(offered):
         upsert_override(connection, offered, requested_code)
