@@ -215,6 +215,7 @@ weekSelect.addEventListener("change", () => {
   renderSchedule();
 });
 swapForm.addEventListener("submit", createSwapRequest);
+swapForm.addEventListener("invalid", () => showToast("Veuillez compléter tous les champs visibles."), true);
 swapList.addEventListener("click", handleSwapAction);
 scheduleList.addEventListener("click", handleScheduleAction);
 annualList.addEventListener("click", handleScheduleAction);
@@ -1220,6 +1221,9 @@ function populateSwapOptions(selectedKey = "", scope = activeSwapScope, requeste
   requestedAssignmentFixed.textContent = lockedEntry ? assignmentLabel(lockedEntry) : "";
   document.getElementById("requested-task-label").textContent = scope === "weekly" ? "3. Semaine complète" : "3. Tâche journalière";
   populateRequestedDoctorOptions();
+  requestedDoctor.disabled = Boolean(lockedEntry);
+  requestedWeek.disabled = Boolean(lockedEntry);
+  requestedAssignment.disabled = Boolean(lockedEntry);
 }
 
 function configureOfferedAssignmentPicker(scope, selectedKey, mine) {
@@ -1387,6 +1391,7 @@ function handleScheduleAction(event) {
 
 async function createSwapRequest(event) {
   event.preventDefault();
+  const submitButton = event.submitter || swapForm.querySelector('button[type="submit"]');
   const offered = offeredAssignment.value ? findAssignment(offeredAssignment.value) : null;
   const requested = findAssignment(lockedRequestedKey || requestedAssignment.value);
   if (!requested) return;
@@ -1405,6 +1410,8 @@ async function createSwapRequest(event) {
   const offeredPicked = offered ? pickAssignment(offered) : noOfferAssignment(activeSwapScope);
   const requestedPicked = pickAssignment(requested);
   if (!confirm(swapConfirmationText(offeredPicked, requestedPicked))) return;
+  submitButton.disabled = true;
+  submitButton.textContent = "Envoi en cours...";
   const request = {
     scope: activeSwapScope,
     offered: isNoOffer(offeredPicked) ? null : offeredPicked,
@@ -1420,6 +1427,9 @@ async function createSwapRequest(event) {
     showToast("Demande d'échange transmise au serveur.");
   } catch (error) {
     showToast(error.message);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "Envoyer la demande";
   }
 }
 
