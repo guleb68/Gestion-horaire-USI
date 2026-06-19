@@ -181,6 +181,10 @@ window.addEventListener("horaire:session-expired", () => {
   currentAccount = null;
   showLogin("Votre session a expiré. Veuillez vous reconnecter.");
 });
+window.addEventListener("horaire:api-wakeup", (event) => {
+  const submit = document.getElementById("login-submit");
+  if (submit.disabled) submit.textContent = event.detail.attempt === 1 ? "Connexion au serveur..." : "Réveil du serveur...";
+});
 document.getElementById("apply-admin-weekly-swap").addEventListener("click", applyAdminWeeklySwap);
 document.getElementById("save-monthly-pdf-settings").addEventListener("click", saveMonthlyPdfSettings);
 document.getElementById("simulate-monthly-pdf-send").addEventListener("click", simulateMonthlyPdfSend);
@@ -297,6 +301,7 @@ async function initializeApplication() {
     return;
   }
   try {
+    await API.wake();
     currentAccount = await API.me();
     CURRENT_USER = currentAccount.code;
     await loadSharedData();
@@ -312,7 +317,7 @@ async function handleLogin(event) {
   const submit = document.getElementById("login-submit");
   const errorLabel = document.getElementById("login-error");
   submit.disabled = true;
-  submit.textContent = "Connexion...";
+  submit.textContent = "Connexion au serveur...";
   errorLabel.hidden = true;
   try {
     currentAccount = await API.login(
@@ -325,7 +330,9 @@ async function handleLogin(event) {
     showAuthenticatedApplication();
   } catch (error) {
     API.logout();
-    errorLabel.textContent = error.message;
+    errorLabel.textContent = error.message === "Failed to fetch"
+      ? "Le serveur est temporairement inaccessible. Attendez quelques instants, puis réessayez."
+      : error.message;
     errorLabel.hidden = false;
   } finally {
     submit.disabled = false;

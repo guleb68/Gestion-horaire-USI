@@ -10,52 +10,84 @@
     return sessionStorage.getItem(TOKEN_KEY) || "";
   }
 
+  const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+  async function wake() {
+    const delays = [0, 1500, 2500, 4000, 6000, 8000, 10000, 12000, 15000];
+    for (let attempt = 0; attempt < delays.length; attempt += 1) {
+      if (delays[attempt]) await sleep(delays[attempt]);
+      window.dispatchEvent(new CustomEvent("horaire:api-wakeup", { detail: { attempt: attempt + 1 } }));
+      try {
+        const response = await fetch(`${API_BASE_URL}/health`, { cache: "no-store" });
+        const payload = await response.json().catch(() => null);
+        if (response.ok && payload?.status === "ok") return;
+      } catch {}
+    }
+    throw new Error("Le serveur ne s'est pas réveillé. Attendez quelques instants, puis réessayez.");
+  }
+
   async function request(path, options = {}) {
+    const { retry = false, ...fetchOptions } = options;
     const headers = new Headers(options.headers || {});
     if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
     if (token()) headers.set("Authorization", `Bearer ${token()}`);
-    const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
-    let payload = null;
-    try { payload = await response.json(); } catch {}
-    if (!response.ok) {
-      if (response.status === 401 && token()) {
-        sessionStorage.removeItem(TOKEN_KEY);
-        window.dispatchEvent(new CustomEvent("horaire:session-expired"));
+    const attempts = retry ? 3 : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const response = await fetch(`${API_BASE_URL}${path}`, { ...fetchOptions, headers, cache: "no-store" });
+        let payload = null;
+        try { payload = await response.json(); } catch {}
+        if (response.ok && payload !== null) return payload;
+        if (response.status === 401 && token()) {
+          sessionStorage.removeItem(TOKEN_KEY);
+          window.dispatchEvent(new CustomEvent("horaire:session-expired"));
+        }
+        if (attempt + 1 < attempts && [502, 503, 504].includes(response.status)) {
+          await sleep(1500 * (attempt + 1));
+          continue;
+        }
+        const error = new Error(payload?.detail || (response.ok ? "Réponse invalide du serveur" : `Erreur du serveur (${response.status})`));
+        error.status = response.status;
+        error.retryable = response.ok || [502, 503, 504].includes(response.status);
+        throw error;
+      } catch (error) {
+        if (attempt + 1 >= attempts || error.retryable === false || (error.status && ![502, 503, 504].includes(error.status))) throw error;
+        await sleep(1500 * (attempt + 1));
       }
-      const error = new Error(payload?.detail || `Erreur du serveur (${response.status})`);
-      error.status = response.status;
-      throw error;
     }
-    return payload;
   }
 
   window.HoraireApi = {
     baseUrl: API_BASE_URL,
     hasSession: () => Boolean(token()),
+    wake,
     login: async (code, password) => {
+      await wake();
       const result = await request("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ code, password }),
+        retry: true,
       });
+      if (!result?.access_token || !result?.user) throw new Error("La réponse de connexion est incomplète.");
       sessionStorage.setItem(TOKEN_KEY, result.access_token);
       return result.user;
     },
     logout: () => sessionStorage.removeItem(TOKEN_KEY),
-    me: () => request("/api/me"),
-    users: () => request("/api/users"),
+    me: () => request("/api/me", { retry: true }),
+    users: () => request("/api/users", { retry: true }),
     saveUser: (user) => request("/api/admin/users", { method: "POST", body: JSON.stringify(user) }),
-    schedule: (year) => request(`/api/schedules?year=${encodeURIComponent(year)}`),
+    schedule: (year) => request(`/api/schedules?year=${encodeURIComponent(year)}`, { retry: true }),
     replaceSchedule: (year, weeks) => request(`/api/admin/schedules/${encodeURIComponent(year)}`, {
       method: "POST",
       body: JSON.stringify({ weeks }),
     }),
-    swaps: () => request("/api/swaps"),
+    swaps: () => request("/api/swaps", { retry: true }),
     createSwap: (swap) => request("/api/swaps", { method: "POST", body: JSON.stringify(swap) }),
     directSwap: (swap) => request("/api/admin/swaps/direct", { method: "POST", body: JSON.stringify(swap) }),
     decideSwap: (id, decision) => request(`/api/swaps/${encodeURIComponent(id)}/decision`, {
       method: "POST",
       body: JSON.stringify({ decision }),
     }),
-    audit: () => request("/api/audit"),
+    audit: () => request("/api/audit", { retry: true }),
   };
 })();
