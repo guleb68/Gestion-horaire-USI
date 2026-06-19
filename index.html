@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#123f59" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Mon horaire USI" />
+    <meta name="description" content="Consultation et échanges de l'horaire des soins intensifs." />
+    <title>Partage de l'horaire USI</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Service de soins intensifs du CHU de Québec - Université Laval</p>
+        <h1>Mon horaire</h1>
+      </div>
+      <button id="profile-button" class="avatar-button" type="button" aria-label="Profil de Guillaume Leblanc">
+        GL
+      </button>
+    </header>
+
+    <main class="app-shell">
+      <section class="welcome-card">
+        <div>
+          <span class="demo-badge">Prototype local</span>
+          <h2>Bonjour Dr Guillaume Leblanc</h2>
+          <p>Consultez l'horaire de garde le plus à jour et gérez vos demandes d'échanges.</p>
+        </div>
+        <div class="next-shift">
+          <span>Prochaine garde</span>
+          <strong id="next-shift-label">Date · Tâche</strong>
+        </div>
+      </section>
+
+      <section id="security-notice" class="notice-card">
+        <strong>Mode démonstration</strong>
+        <p>
+          Les données sont enregistrées uniquement sur cet appareil. Une connexion
+          institutionnelle et une base centrale seront nécessaires avant la diffusion réelle.
+        </p>
+      </section>
+
+      <section id="view-schedule" class="app-view" data-view="schedule">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Horaire officiel</p>
+            <h2>Horaires hebdomadaires</h2>
+          </div>
+        </div>
+        <div class="schedule-controls">
+          <label>
+            <span>Année affichée</span>
+            <select id="year-select"></select>
+          </label>
+          <label>
+            <span>Semaines à afficher</span>
+            <select id="week-select"></select>
+          </label>
+        </div>
+        <label class="schedule-search">
+          <span>Rechercher dans l'horaire annuel</span>
+          <input id="schedule-search" type="search" placeholder="Semaine, tâche ou code du médecin" />
+        </label>
+        <div id="schedule-list" class="weekly-table-list"></div>
+      </section>
+
+      <section id="view-annual" class="app-view active" data-view="annual">
+        <div class="section-heading annual-section-heading">
+          <div class="annual-title">
+            <h2>Horaire annuel</h2>
+          </div>
+          <div class="annual-heading-actions">
+            <label>
+              <span>Année affichée</span>
+              <select id="annual-year-select"></select>
+            </label>
+            <div class="import-panel">
+              <label>
+                <span>Importer dans l'année</span>
+                <select id="import-year-select"></select>
+              </label>
+              <label class="import-button">
+                Importer Excel ou CSV
+                <input id="csv-input" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" />
+              </label>
+            </div>
+            <button id="export-annual-pdf" class="primary-button compact" type="button">Exporter PDF</button>
+          </div>
+        </div>
+        <p id="import-status" class="muted-copy" hidden>
+          Choisissez d'abord l'année cible, puis importez le fichier Excel ou CSV correspondant.
+        </p>
+        <p id="annual-status" class="muted-copy" hidden>
+          L'horaire complet est affiché dans le même format synthèse que le fichier importé.
+        </p>
+        <div class="annual-table-card">
+          <div class="annual-table-scroll">
+            <table class="annual-roster-table">
+              <thead>
+                <tr>
+                  <th>Sem</th>
+                  <th id="annual-year-heading">Horaire USI</th>
+                  <th>NOTES HEJ</th>
+                  <th>USI A-B</th>
+                  <th>USI C-D</th>
+                  <th>UGB</th>
+                  <th>Nuits</th>
+                </tr>
+              </thead>
+              <tbody id="annual-list"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-holidays" class="app-view" data-view="holidays">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Consultation</p>
+            <h2>Horaires des fêtes</h2>
+          </div>
+          <label id="holiday-upload-panel" class="import-button">
+            Télécharger un PDF
+            <input id="holiday-pdf-input" type="file" accept="application/pdf,.pdf" />
+          </label>
+        </div>
+        <p id="holiday-status" class="muted-copy">
+          Aucun horaire des fêtes n'a encore été téléchargé.
+        </p>
+        <div id="holiday-pdf-viewer" class="pdf-viewer"></div>
+      </section>
+
+      <section id="view-hsfa" class="app-view" data-view="hsfa">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Consultation</p>
+            <h2>HSFA</h2>
+          </div>
+          <label id="hsfa-upload-panel" class="import-button">
+            Télécharger un PDF
+            <input id="hsfa-pdf-input" type="file" accept="application/pdf,.pdf" />
+          </label>
+        </div>
+        <p id="hsfa-status" class="muted-copy">
+          Aucun horaire HSFA n'a encore été téléchargé.
+        </p>
+        <div id="hsfa-pdf-viewer" class="pdf-viewer"></div>
+      </section>
+
+      <section id="view-swaps" class="app-view" data-view="swaps">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Échanges</p>
+            <h2>Demandes</h2>
+          </div>
+          <button id="open-swap-form" class="primary-button compact" type="button">Nouvelle</button>
+        </div>
+        <div class="subtabs" role="tablist">
+          <button class="subtab active" data-swap-filter="incoming" type="button">À répondre</button>
+          <button class="subtab" data-swap-filter="outgoing" type="button">Envoyées</button>
+          <button class="subtab" data-swap-filter="history" type="button">Historique</button>
+        </div>
+        <div class="status-flow">
+          <span class="status-badge pending">Demandée</span>
+          <span class="status-badge accepted">Acceptée</span>
+          <span class="status-badge declined">Refusée</span>
+        </div>
+        <article id="admin-direct-swap" class="admin-swap-card">
+          <div>
+            <p class="section-kicker">Administrateur</p>
+            <h3>Échange direct de semaines</h3>
+            <p class="muted-copy">Appliquez un échange complet sans approbation des intensivistes.</p>
+          </div>
+          <div class="admin-swap-grid">
+            <label>
+              Semaine / intensiviste 1
+              <select id="admin-weekly-one"></select>
+            </label>
+            <label>
+              Semaine / intensiviste 2
+              <select id="admin-weekly-two"></select>
+            </label>
+          </div>
+          <button id="apply-admin-weekly-swap" class="primary-button full-width" type="button">Appliquer l'échange directement</button>
+        </article>
+        <div id="swap-list" class="card-list"></div>
+        <section id="audit-admin" class="notification-settings admin-only-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Traçabilité</p>
+              <h2>Journal d'audit</h2>
+            </div>
+          </div>
+          <div id="audit-list" class="audit-list"></div>
+        </section>
+      </section>
+
+      <section id="view-profile" class="app-view" data-view="profile">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Compte</p>
+            <h2>Profil et installation</h2>
+          </div>
+        </div>
+        <article class="profile-card">
+          <div class="profile-avatar">GL</div>
+          <div>
+            <strong>Guillaume Leblanc</strong>
+            <p>Intensiviste · Compte de démonstration</p>
+          </div>
+        </article>
+        <section class="notification-settings">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Alertes</p>
+              <h2>Notifications d'échange</h2>
+            </div>
+            <span class="status-badge accepted">Activées</span>
+          </div>
+          <div class="notification-channel">
+            <span class="channel-icon">P</span>
+            <div><strong>Notification poussée</strong><p>iPhone et Android · envoyée immédiatement</p></div>
+            <span class="status-badge accepted">Prévue</span>
+          </div>
+          <div class="notification-channel">
+            <span class="channel-icon">@</span>
+            <div><strong>Courriel institutionnel</strong><p>Copie envoyée avec chaque demande</p></div>
+            <span class="status-badge accepted">Activé</span>
+          </div>
+          <div class="notification-channel">
+            <span class="channel-icon">48</span>
+            <div><strong>Rappel automatique</strong><p>Après 48 heures sans réponse</p></div>
+            <span class="status-badge accepted">Activé</span>
+          </div>
+          <p class="validation-note">
+            Le prototype simule ces événements. L'envoi réel sera activé lors du branchement au serveur sécurisé.
+          </p>
+        </section>
+        <section id="monthly-pdf-admin" class="notification-settings admin-only-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Administrateur</p>
+              <h2>Envoi mensuel des PDF</h2>
+            </div>
+            <span id="monthly-pdf-status" class="status-badge accepted">Simulation</span>
+          </div>
+          <p class="muted-copy">
+            Simulation : le 20 de chaque mois, le système prépare les listes de garde hebdomadaires du mois suivant et les envoie aux destinataires inscrits.
+          </p>
+          <label class="toggle-row">
+            <input id="monthly-pdf-enabled" type="checkbox" />
+            <span>Activer la simulation d'envoi automatique le 20 du mois précédent</span>
+          </label>
+          <label>
+            Destinataires
+            <textarea id="monthly-pdf-recipients" rows="4" placeholder="courriel1@exemple.ca&#10;courriel2@exemple.ca"></textarea>
+          </label>
+          <div class="monthly-pdf-summary">
+            <div>
+              <span>Prochain envoi simulé</span>
+              <strong id="monthly-pdf-next-run">À planifier</strong>
+            </div>
+            <div>
+              <span>PDF prévus</span>
+              <strong id="monthly-pdf-attachment-count">0 fichier</strong>
+            </div>
+          </div>
+          <div class="admin-swap-grid">
+            <button id="save-monthly-pdf-settings" class="secondary-button" type="button">Enregistrer les paramètres</button>
+            <button id="simulate-monthly-pdf-send" class="primary-button" type="button">Simuler l'envoi maintenant</button>
+          </div>
+          <div>
+            <h3 class="compact-heading">Historique simulé</h3>
+            <div id="monthly-pdf-history" class="monthly-pdf-history"></div>
+          </div>
+        </section>
+        <section id="admin-dashboard" class="notification-settings admin-only-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Administrateur</p>
+              <h2>Tableau de bord</h2>
+            </div>
+          </div>
+          <div id="admin-dashboard-grid" class="admin-dashboard-grid"></div>
+        </section>
+        <section id="notification-template-admin" class="notification-settings admin-only-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Notifications</p>
+              <h2>Modèles prêts pour le serveur</h2>
+            </div>
+          </div>
+          <div id="notification-template-list" class="template-list"></div>
+        </section>
+        <section id="user-admin" class="notification-settings admin-only-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Administrateur</p>
+              <h2>Gestion des utilisateurs</h2>
+            </div>
+            <button id="new-user-admin" class="secondary-button compact" type="button">Ajouter un utilisateur</button>
+          </div>
+          <p id="user-admin-mode" class="validation-note">
+            Sélectionnez un utilisateur existant ou ajoutez un nouveau compte.
+          </p>
+          <div class="admin-swap-grid">
+            <label>
+              Utilisateur
+              <select id="user-admin-select"></select>
+            </label>
+            <label>
+              Code
+              <input id="user-admin-code" type="text" />
+            </label>
+            <label>
+              Nom complet
+              <input id="user-admin-name" type="text" />
+            </label>
+            <label>
+              Courriel
+              <input id="user-admin-email" type="email" />
+            </label>
+            <label>
+              Téléphone
+              <input id="user-admin-phone" type="tel" />
+            </label>
+            <label>
+              Rôle
+              <select id="user-admin-role">
+                <option value="intensiviste">Intensiviste</option>
+                <option value="admin">Administrateur</option>
+              </select>
+            </label>
+          </div>
+          <label class="toggle-row">
+            <input id="user-admin-active" type="checkbox" />
+            <span>Activer le compte utilisateur</span>
+          </label>
+          <div class="admin-swap-grid">
+            <button id="cancel-new-user-admin" class="secondary-button" type="button" hidden>Annuler l'ajout</button>
+            <button id="save-user-admin" class="primary-button" type="button">Enregistrer l'utilisateur</button>
+          </div>
+        </section>
+        <button id="install-app" class="primary-button full-width" type="button" hidden>
+          Installer cette application
+        </button>
+        <p id="ios-install-help" class="notice-card" hidden>
+          Sur iPhone ou iPad, utilisez le bouton Partager de Safari, puis « Sur l'écran d'accueil ».
+        </p>
+        <button id="reset-demo" class="secondary-button full-width" type="button">
+          Réinitialiser la démonstration
+        </button>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Navigation principale">
+      <button class="nav-button active" data-target="annual" type="button">
+        <svg class="nav-icon annual-calendar-icon" viewBox="0 0 28 24" aria-hidden="true">
+          <rect class="calendar-shell" x="1.5" y="3.5" width="25" height="19" rx="3" />
+          <path class="calendar-header" d="M2 9h24" />
+          <path class="calendar-ring" d="M8 1.5v5M20 1.5v5" />
+          <rect class="calendar-ab" x="3" y="10.5" width="5" height="10" />
+          <rect class="calendar-cd" x="8.7" y="10.5" width="5" height="10" />
+          <rect class="calendar-ugb" x="14.3" y="10.5" width="5" height="10" />
+          <rect class="calendar-nights" x="20" y="10.5" width="5" height="10" />
+        </svg>
+        <span>Horaire annuel</span>
+      </button>
+      <button class="nav-button" data-target="schedule" type="button">
+        <svg class="nav-icon weekly-schedule-icon" viewBox="0 0 28 24" aria-hidden="true">
+          <rect class="weekly-day" x="2" y="2" width="24" height="6.5" />
+          <rect class="weekly-night" x="2" y="8.5" width="24" height="6.5" />
+          <rect class="weekly-unit" x="2" y="15" width="24" height="7" />
+          <rect class="weekly-shell" x="1.5" y="1.5" width="25" height="21" rx="2.5" />
+          <path class="weekly-grid" d="M2 8.5h24M2 15h24M7.5 2v20M13.5 2v20M19.5 2v20" />
+        </svg>
+        <span>Horaire hebdomadaire</span>
+      </button>
+      <button class="nav-button" data-target="holidays" type="button">
+        <span class="nav-icon">▧</span><span>Période des Fêtes</span>
+      </button>
+      <button class="nav-button" data-target="hsfa" type="button">
+        <span class="nav-icon">▥</span><span>Horaire HSFA</span>
+      </button>
+      <button class="nav-button" data-target="swaps" type="button">
+        <span class="nav-icon">⇄</span><span>Échanges</span><span id="swap-badge" class="nav-badge">1</span>
+      </button>
+      <button class="nav-button" data-target="profile" type="button">
+        <span class="nav-icon profile-nav-icon">GL</span><span>Profil</span>
+      </button>
+    </nav>
+
+    <dialog id="swap-dialog">
+      <form id="swap-form" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <p class="section-kicker">Nouvelle demande</p>
+            <h2 id="swap-dialog-title">Proposer un échange</h2>
+          </div>
+          <button id="close-swap-form" class="icon-button" type="button" aria-label="Fermer">×</button>
+        </div>
+        <div id="requested-assignment-field" class="form-field">
+          <span id="requested-field-label">Affectation demandée</span>
+          <div id="requested-assignment-picker" class="requested-assignment-picker">
+            <label>
+              <span>1. Intensiviste visé</span>
+              <select id="requested-doctor" required></select>
+            </label>
+            <label>
+              <span>2. Semaine</span>
+              <select id="requested-week" required disabled></select>
+            </label>
+            <label>
+              <span id="requested-task-label">3. Tâche journalière</span>
+              <select id="requested-assignment" required disabled></select>
+            </label>
+          </div>
+          <div id="requested-assignment-fixed" class="fixed-assignment" hidden></div>
+        </div>
+        <div id="offered-assignment-field" class="form-field">
+          <span id="offered-field-label">Mon affectation</span>
+          <div id="offered-week-field" class="offered-week-field">
+            <label>
+              <span>1. Semaine offerte</span>
+              <select id="offered-week"></select>
+            </label>
+          </div>
+          <label id="offered-task-field">
+            <span id="offered-task-label">2. Date et tâche</span>
+            <select id="offered-assignment"></select>
+          </label>
+          <div id="offered-assignment-preview" class="assignment-preview" aria-live="polite"></div>
+        </div>
+        <label>
+          Message facultatif
+          <textarea id="swap-message" rows="3" placeholder="Précision pour votre collègue"></textarea>
+        </label>
+        <p class="validation-note">
+          Dans la version sécurisée, les règles de l'horaire seront validées automatiquement avant l'envoi.
+        </p>
+        <button class="primary-button full-width" type="submit">Envoyer la demande</button>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="vendor-xlsx.full.min.js"></script>
+    <script src="app.js?v=79"></script>
+    <script src="pwa.js?v=1"></script>
+  </body>
+</html>
