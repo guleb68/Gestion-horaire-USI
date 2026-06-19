@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: horaire-usi-frontend
+    runtime: static
+    buildCommand: echo "Aucune compilation requise"
+    staticPublishPath: ./partage-horaire
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=()
+      - path: /service-worker.js
+        name: Cache-Control
+        value: no-cache, no-store, must-revalidate
+      - path: /manifest.webmanifest
+        name: Content-Type
+        value: application/manifest+json
+
+  - type: web
+    name: horaire-usi-api
+    runtime: python
+    plan: free
+    region: ohio
+    rootDir: partage-api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: horaire-usi-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: ADMIN_CODE
+        value: GLEB
+      - key: ADMIN_NAME
+        value: Guillaume Leblanc
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_INITIAL_PASSWORD
+        sync: false
+
+databases:
+  - name: horaire-usi-db
+    databaseName: horaire_usi
+    user: horaire_usi_api
+    plan: free
+    region: ohio
+    ipAllowList: []
