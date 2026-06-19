@@ -1,6 +1,7 @@
 const STORAGE_KEY = "horaire-usi-partage-demo-v4";
-const CURRENT_USER = "GLEB";
-const ADMIN_USERS = ["GLEB"];
+const API = window.HoraireApi;
+let CURRENT_USER = "";
+let currentAccount = null;
 const APP_CURRENT_YEAR = new Date().getFullYear();
 const DAY_NAMES = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const ANNUAL_TASK_COLUMNS = [
@@ -145,6 +146,8 @@ const userAdminName = document.getElementById("user-admin-name");
 const userAdminEmail = document.getElementById("user-admin-email");
 const userAdminPhone = document.getElementById("user-admin-phone");
 const userAdminRole = document.getElementById("user-admin-role");
+const userAdminPassword = document.getElementById("user-admin-password");
+const userAdminPasswordLabel = document.getElementById("user-admin-password-label");
 const userAdminActive = document.getElementById("user-admin-active");
 const cancelNewUserAdminButton = document.getElementById("cancel-new-user-admin");
 const scheduleSearch = document.getElementById("schedule-search");
@@ -170,7 +173,13 @@ document.querySelectorAll(".subtab").forEach((button) => {
 document.getElementById("profile-button").addEventListener("click", () => showView("profile"));
 document.getElementById("open-swap-form").addEventListener("click", () => openSwapDialog());
 document.getElementById("close-swap-form").addEventListener("click", () => swapDialog.close());
-document.getElementById("reset-demo").addEventListener("click", resetDemo);
+document.getElementById("login-form").addEventListener("submit", handleLogin);
+document.getElementById("logout-button").addEventListener("click", logout);
+window.addEventListener("horaire:session-expired", () => {
+  CURRENT_USER = "";
+  currentAccount = null;
+  showLogin("Votre session a expiré. Veuillez vous reconnecter.");
+});
 document.getElementById("apply-admin-weekly-swap").addEventListener("click", applyAdminWeeklySwap);
 document.getElementById("save-monthly-pdf-settings").addEventListener("click", saveMonthlyPdfSettings);
 document.getElementById("simulate-monthly-pdf-send").addEventListener("click", simulateMonthlyPdfSend);
@@ -210,7 +219,7 @@ swapList.addEventListener("click", handleSwapAction);
 scheduleList.addEventListener("click", handleScheduleAction);
 annualList.addEventListener("click", handleScheduleAction);
 
-renderAll();
+initializeApplication();
 
 function week(weekNumber, date, entries) {
   const start = parseFrenchDate(date);
@@ -276,6 +285,172 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+async function initializeApplication() {
+  if (!API) {
+    showLogin("Le client API n'est pas disponible. Rechargez la page.");
+    return;
+  }
+  if (!API.hasSession()) {
+    showLogin();
+    return;
+  }
+  try {
+    currentAccount = await API.me();
+    CURRENT_USER = currentAccount.code;
+    await loadSharedData();
+    showAuthenticatedApplication();
+  } catch (error) {
+    API.logout();
+    showLogin(error.message);
+  }
+}
+
+async function handleLogin(event) {
+  event.preventDefault();
+  const submit = document.getElementById("login-submit");
+  const errorLabel = document.getElementById("login-error");
+  submit.disabled = true;
+  submit.textContent = "Connexion...";
+  errorLabel.hidden = true;
+  try {
+    currentAccount = await API.login(
+      document.getElementById("login-code").value.trim().toUpperCase(),
+      document.getElementById("login-password").value,
+    );
+    CURRENT_USER = currentAccount.code;
+    await loadSharedData();
+    document.getElementById("login-form").reset();
+    showAuthenticatedApplication();
+  } catch (error) {
+    API.logout();
+    errorLabel.textContent = error.message;
+    errorLabel.hidden = false;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = "Se connecter";
+  }
+}
+
+function showLogin(message = "") {
+  document.getElementById("login-screen").hidden = false;
+  document.getElementById("app-header").hidden = true;
+  document.getElementById("app-main").hidden = true;
+  document.getElementById("app-nav").hidden = true;
+  const errorLabel = document.getElementById("login-error");
+  errorLabel.textContent = message;
+  errorLabel.hidden = !message;
+}
+
+function showAuthenticatedApplication() {
+  document.getElementById("login-screen").hidden = true;
+  document.getElementById("app-header").hidden = false;
+  document.getElementById("app-main").hidden = false;
+  document.getElementById("app-nav").hidden = false;
+  updateAuthenticatedIdentity();
+  renderAll();
+}
+
+function logout() {
+  API.logout();
+  CURRENT_USER = "";
+  currentAccount = null;
+  state = defaultState();
+  showLogin();
+}
+
+function updateAuthenticatedIdentity() {
+  const name = currentAccount?.full_name || doctorName(CURRENT_USER) || CURRENT_USER;
+  const initials = name.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  document.getElementById("welcome-user-name").textContent = `Bonjour Dr ${name}`;
+  document.getElementById("profile-button").textContent = initials;
+  document.getElementById("profile-button").setAttribute("aria-label", `Profil de ${name}`);
+  document.getElementById("profile-avatar").textContent = initials;
+  document.getElementById("profile-full-name").textContent = name;
+  document.getElementById("profile-role").textContent = currentAccount?.role === "admin" ? "Administrateur" : "Intensiviste";
+  document.querySelector(".profile-nav-icon").textContent = CURRENT_USER;
+}
+
+async function loadSharedData() {
+  const previousActiveYear = Number(state.activeYear) || APP_CURRENT_YEAR;
+  const years = [APP_CURRENT_YEAR, APP_CURRENT_YEAR + 1];
+  const [users, swaps, ...schedules] = await Promise.all([
+    API.users(),
+    API.swaps(),
+    ...years.map((year) => API.schedule(year)),
+  ]);
+  state.users = users.map(apiUserToLocal);
+  state.requests = swaps.map(apiSwapToLocal);
+  state.schedulesByYear = {};
+  state.cellOverrides = {};
+  schedules.forEach((payload, index) => applyApiSchedule(years[index], payload));
+  if (isAdmin()) {
+    try { state.auditTrail = (await API.audit()).map(apiAuditToLocal); } catch { state.auditTrail = []; }
+  } else {
+    state.auditTrail = [];
+  }
+  state.activeYear = [APP_CURRENT_YEAR, APP_CURRENT_YEAR + 1].includes(previousActiveYear) ? previousActiveYear : APP_CURRENT_YEAR;
+  saveState();
+}
+
+async function refreshSharedData() {
+  await loadSharedData();
+  renderAll();
+}
+
+function apiUserToLocal(user) {
+  return { code: user.code, name: user.full_name, email: user.email, phone: user.phone || "", role: user.role, active: user.active !== false };
+}
+
+function apiSwapToLocal(request) {
+  return {
+    ...request,
+    requester: request.requester_code,
+    direction: request.requester_code === CURRENT_USER ? "outgoing" : "incoming",
+    createdAt: request.created_at ? formatNotificationDate(new Date(request.created_at)) : "",
+  };
+}
+
+function apiAuditToLocal(entry) {
+  return {
+    id: entry.id,
+    at: entry.created_at ? formatNotificationDate(new Date(entry.created_at)) : "",
+    by: entry.actor_code,
+    admin: true,
+    action: entry.action,
+    summary: entry.details ? JSON.stringify(entry.details) : "",
+  };
+}
+
+function applyApiSchedule(year, payload) {
+  const weeks = new Map();
+  (payload.schedules || []).forEach((row) => {
+    if (!weeks.has(row.week_number)) {
+      weeks.set(row.week_number, {
+        year,
+        weekNumber: row.week_number,
+        date: formatAnnualDate(new Date(`${row.week_start}T12:00:00`)),
+        note: "",
+        assignments: [],
+      });
+    }
+    const placeholder = ["HDQ", "VACANT"].includes(row.doctor_code) ? (row.doctor_code === "HDQ" ? "HDQ" : "Vacant") : "";
+    weeks.get(row.week_number).assignments.push({
+      task: row.task,
+      code: placeholder ? "" : row.doctor_code,
+      doctor: placeholder ? "" : doctorName(row.doctor_code),
+      placeholder,
+    });
+  });
+  state.schedulesByYear[year] = Array.from(weeks.values()).sort((left, right) => left.weekNumber - right.weekNumber);
+  (payload.overrides || []).forEach((row) => {
+    state.cellOverrides[`${year}|${row.week_number}|${row.duty_id}|${row.day_index}`] = {
+      code: row.doctor_code,
+      doctor: doctorName(row.doctor_code),
+      kind: "partial",
+    };
+  });
+}
+
 function showView(name) {
   document.querySelectorAll(".app-view").forEach((view) => view.classList.toggle("active", view.dataset.view === name));
   document.querySelectorAll(".nav-button").forEach((button) => button.classList.toggle("active", button.dataset.target === name));
@@ -302,7 +477,7 @@ function renderAll() {
 }
 
 function isAdmin() {
-  return ADMIN_USERS.includes(CURRENT_USER);
+  return currentAccount?.role === "admin";
 }
 
 function renderAdminControls() {
@@ -417,6 +592,9 @@ function renderSelectedUserAdmin() {
   userAdminPhone.value = user.phone || "";
   userAdminRole.value = user.role || "intensiviste";
   userAdminActive.checked = user.active !== false;
+  userAdminPassword.value = "";
+  userAdminPassword.required = false;
+  userAdminPasswordLabel.textContent = "Nouveau mot de passe (facultatif)";
 }
 
 function startNewUserAdmin() {
@@ -440,10 +618,13 @@ function renderNewUserAdmin() {
   userAdminPhone.value = "";
   userAdminRole.value = "intensiviste";
   userAdminActive.checked = true;
+  userAdminPassword.value = "";
+  userAdminPassword.required = true;
+  userAdminPasswordLabel.textContent = "Mot de passe initial (12 caractères minimum)";
   userAdminCode.focus();
 }
 
-function saveUserAdmin() {
+async function saveUserAdmin() {
   if (!isAdmin()) {
     showToast("Réservé à l'administrateur.");
     return;
@@ -454,6 +635,14 @@ function saveUserAdmin() {
     showToast("Le code et le nom sont requis.");
     return;
   }
+  if (!userAdminEmail.value.trim()) {
+    showToast("Le courriel est requis.");
+    return;
+  }
+  if (wasNew && userAdminPassword.value.length < 12) {
+    showToast("Le mot de passe initial doit contenir au moins 12 caractères.");
+    return;
+  }
   state.users = normalizeUsers(state.users);
   if (wasNew && state.users.some((user) => user.code === code)) {
     showToast("Ce code existe déjà. Sélectionnez l'utilisateur pour le modifier.");
@@ -461,24 +650,24 @@ function saveUserAdmin() {
   }
   const updated = {
     code,
-    name: userAdminName.value.trim(),
+    full_name: userAdminName.value.trim(),
     email: userAdminEmail.value.trim(),
     phone: userAdminPhone.value.trim(),
     role: userAdminRole.value,
     active: userAdminActive.checked,
+    password: userAdminPassword.value || null,
   };
-  const index = wasNew ? -1 : state.users.findIndex((user) => user.code === userAdminSelect.value || user.code === code);
-  if (index >= 0) state.users[index] = updated;
-  else state.users.push(updated);
-  addAudit(wasNew ? "Utilisateur ajouté" : "Utilisateur modifié", `${code} · ${updated.name}`, "", `Rôle ${updated.role} · ${updated.active ? "compte activé" : "compte inactif"} · ${updated.email || "courriel absent"}`, true);
-  userAdminMode = "edit";
-  userAdminSelect.disabled = false;
-  userAdminSelect.value = code;
-  saveState();
-  renderAll();
-  userAdminSelect.value = code;
-  renderSelectedUserAdmin();
-  showToast(wasNew ? "Utilisateur ajouté." : "Utilisateur enregistré.");
+  try {
+    await API.saveUser(updated);
+    state.users = (await API.users()).map(apiUserToLocal);
+    userAdminMode = "edit";
+    renderAll();
+    userAdminSelect.value = code;
+    renderSelectedUserAdmin();
+    showToast(wasNew ? "Utilisateur ajouté au serveur." : "Utilisateur enregistré sur le serveur.");
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
 function renderAuditTrail() {
@@ -1007,7 +1196,7 @@ function canApproveRequest(request) {
   if (!request || request.status !== "pending") return false;
   if (isAdmin()) return true;
   if (request.requester === CURRENT_USER) return false;
-  return request.offered?.code === CURRENT_USER || request.requested?.code === CURRENT_USER;
+  return request.requested?.code === CURRENT_USER;
 }
 
 function populateSwapOptions(selectedKey = "", scope = activeSwapScope, requestedLockKey = "", offeredFirst = false) {
@@ -1196,7 +1385,7 @@ function handleScheduleAction(event) {
   swapDialog.showModal();
 }
 
-function createSwapRequest(event) {
+async function createSwapRequest(event) {
   event.preventDefault();
   const offered = offeredAssignment.value ? findAssignment(offeredAssignment.value) : null;
   const requested = findAssignment(lockedRequestedKey || requestedAssignment.value);
@@ -1217,28 +1406,24 @@ function createSwapRequest(event) {
   const requestedPicked = pickAssignment(requested);
   if (!confirm(swapConfirmationText(offeredPicked, requestedPicked))) return;
   const request = {
-    id: `swap-${Date.now()}`,
-    direction: "outgoing",
-    requester: CURRENT_USER,
     scope: activeSwapScope,
-    offered: offeredPicked,
+    offered: isNoOffer(offeredPicked) ? null : offeredPicked,
     requested: requestedPicked,
     message: document.getElementById("swap-message").value.trim(),
-    status: "pending",
-    createdAt: "À l'instant",
-    notification: createNotificationState(),
   };
-  state.requests.unshift(request);
-  addAudit("Demande créée", requestAuditSummary(request), "", `Demandée · ${swapEntryLabel(request.requested)}`, isAdmin());
-  saveState();
-  renderSwaps();
-  swapDialog.close();
-  swapForm.reset();
-  showView("swaps");
-  showToast("Demande d'échange créée.");
+  try {
+    await API.createSwap(request);
+    await refreshSharedData();
+    swapDialog.close();
+    swapForm.reset();
+    showView("swaps");
+    showToast("Demande d'échange transmise au serveur.");
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
-function applyAdminWeeklySwap() {
+async function applyAdminWeeklySwap() {
   if (!isAdmin()) {
     showToast("Échange administratif réservé à l'administrateur.");
     return;
@@ -1260,31 +1445,24 @@ function applyAdminWeeklySwap() {
   };
   if (!confirm(`Confirmer l'échange administratif?\n\n${requestAuditSummary(adminRequestPreview)}`)) return;
   const request = {
-    id: `admin-swap-${Date.now()}`,
-    direction: "admin",
-    requester: CURRENT_USER,
     scope: "weekly",
     offered: pickAssignment(first),
     requested: pickAssignment(second),
     message: "Échange administratif appliqué sans approbation.",
-    status: "accepted",
-    createdAt: "À l'instant",
-    notification: createCompletedSwapNotification("applied"),
   };
-  const before = requestAuditBefore(request);
-  applyWeeklySwap(request);
-  const after = requestAuditAfter(request);
-  state.requests.unshift(request);
-  addAudit("Échange administratif appliqué", requestAuditSummary(request), before, after, true);
-  saveState();
-  renderAll();
-  swapFilter = "history";
-  document.querySelectorAll(".subtab").forEach((entry) => entry.classList.toggle("active", entry.dataset.swapFilter === "history"));
-  renderSwaps();
-  showToast("Échange administratif appliqué directement.");
+  try {
+    await API.directSwap(request);
+    await refreshSharedData();
+    swapFilter = "history";
+    document.querySelectorAll(".subtab").forEach((entry) => entry.classList.toggle("active", entry.dataset.swapFilter === "history"));
+    renderSwaps();
+    showToast("Échange administratif appliqué sur le serveur.");
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
-function handleSwapAction(event) {
+async function handleSwapAction(event) {
   const button = event.target.closest("[data-action]");
   if (!button) return;
   const request = state.requests.find((entry) => entry.id === button.dataset.id);
@@ -1295,20 +1473,17 @@ function handleSwapAction(event) {
   }
   if (button.dataset.action === "accept") {
     if (!confirm(`Accepter cette demande?\n\n${requestAuditSummary(request)}`)) return;
-    const before = requestAuditBefore(request);
-    applySwap(request);
-    request.status = "accepted";
-    markAdminEmailSent(request, "accepted");
-    addAudit("Demande acceptée", requestAuditSummary(request), before, requestAuditAfter(request), isAdmin());
-    showToast("Échange accepté et appliqué dans la démonstration.");
   } else {
     if (!confirm(`Refuser cette demande?\n\n${requestAuditSummary(request)}`)) return;
-    request.status = "declined";
-    addAudit("Demande refusée", requestAuditSummary(request), "", "", isAdmin());
-    showToast("Demande refusée.");
   }
-  saveState();
-  renderAll();
+  try {
+    const decision = button.dataset.action === "accept" ? "accepted" : "declined";
+    await API.decideSwap(request.id, decision);
+    await refreshSharedData();
+    showToast(decision === "accepted" ? "Échange accepté et appliqué sur le serveur." : "Demande refusée.");
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
 function applySwap(request) {
@@ -1343,10 +1518,16 @@ async function importScheduleFile(event) {
     const rows = extension === "csv" ? parseCsv(await file.text()) : await readExcelRows(file);
     const schedule = scheduleFromRows(rows).map((item) => ({ ...item, year: targetYear }));
     if (!schedule.length) throw new Error("Aucune semaine reconnue dans le fichier");
+    await API.replaceSchedule(targetYear, schedule.map((weekEntry) => ({
+      weekNumber: weekEntry.weekNumber,
+      weekStart: frenchDateToIso(weekEntry.date),
+      assignments: weekEntry.assignments.map((assignment) => ({
+        task: assignment.task,
+        code: assignment.code || (assignment.placeholder === "HDQ" ? "HDQ" : "VACANT"),
+      })),
+    })));
     state.activeYear = targetYear;
-    setCurrentSchedule(schedule);
-    state.requests = [];
-    state.cellOverrides = {};
+    await refreshSharedData();
     state.sourceByYear ||= {};
     state.sourceByYear[targetYear] = file.name;
     selectedWeekFilter = "next4";
@@ -1636,15 +1817,13 @@ function statusLabel(status) { return ({ pending: "Demandée", accepted: "Accept
 function emptyCard(message) { return `<div class="empty-card">${escapeHtml(message)}</div>`; }
 function escapeHtml(value) { return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 function showToast(message) { toast.textContent = message; toast.classList.add("visible"); clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove("visible"), 2600); }
-function resetDemo() { localStorage.removeItem(STORAGE_KEY); state = defaultState(); selectedWeekFilter = "next4"; renderAll(); showToast("Démonstration réinitialisée."); }
-
 function defaultUsers() {
   return Object.entries(DOCTOR_NAMES).map(([code, name]) => ({
     code,
     name,
-    email: code === CURRENT_USER ? "guillaume.leblanc@chudequebec.ca" : "",
+    email: "",
     phone: "",
-    role: ADMIN_USERS.includes(code) ? "admin" : "intensiviste",
+    role: "intensiviste",
     active: true,
   }));
 }
@@ -1658,7 +1837,7 @@ function normalizeUsers(users) {
       name: user.name || DOCTOR_NAMES[user.code] || user.code,
       email: user.email || "",
       phone: user.phone || "",
-      role: user.role || (ADMIN_USERS.includes(user.code) ? "admin" : "intensiviste"),
+      role: user.role || "intensiviste",
       active: user.active !== false,
     });
   });
@@ -1888,7 +2067,10 @@ function demoNotification(sentAt, reminderAt) {
 }
 
 function notificationTimeline(request) {
-  const notification = request.notification || demoNotification(request.createdAt || "Envoyée", "Dans 48 h");
+  if (!request.notification) {
+    return `<div class="notification-timeline"><span><strong>Serveur</strong>Demande synchronisée</span></div>`;
+  }
+  const notification = request.notification;
   const reminderDone = request.status !== "pending";
   const adminEmail = notification.adminEmail;
   return `<div class="notification-timeline">
@@ -1953,6 +2135,14 @@ function parseFrenchDate(value) {
   const match = normalizeSearch(value).match(/(\d{1,2})(?:er)?\s+([a-z]+)\s+(\d{4})/);
   if (!match || months[match[2]] === undefined) return null;
   return new Date(Number(match[3]), months[match[2]], Number(match[1]));
+}
+
+function frenchDateToIso(value) {
+  const parsed = parseFrenchDate(value);
+  if (!parsed) throw new Error(`Date de semaine invalide : ${value}`);
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${parsed.getFullYear()}-${month}-${day}`;
 }
 
 function formatImportedDate(value) {

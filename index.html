@@ -13,21 +13,40 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="topbar">
+    <section id="login-screen" class="login-screen">
+      <form id="login-form" class="login-card">
+        <div class="login-brand">USI</div>
+        <p class="section-kicker">Accès sécurisé</p>
+        <h1>Mon horaire</h1>
+        <p>Service de soins intensifs du CHU de Québec - Université Laval</p>
+        <label>
+          Code utilisateur
+          <input id="login-code" type="text" autocomplete="username" autocapitalize="characters" required />
+        </label>
+        <label>
+          Mot de passe
+          <input id="login-password" type="password" autocomplete="current-password" required />
+        </label>
+        <p id="login-error" class="login-error" role="alert" hidden></p>
+        <button id="login-submit" class="primary-button full-width" type="submit">Se connecter</button>
+      </form>
+    </section>
+
+    <header id="app-header" class="topbar" hidden>
       <div>
         <p class="eyebrow">Service de soins intensifs du CHU de Québec - Université Laval</p>
         <h1>Mon horaire</h1>
       </div>
-      <button id="profile-button" class="avatar-button" type="button" aria-label="Profil de Guillaume Leblanc">
+      <button id="profile-button" class="avatar-button" type="button" aria-label="Ouvrir le profil">
         GL
       </button>
     </header>
 
-    <main class="app-shell">
+    <main id="app-main" class="app-shell" hidden>
       <section class="welcome-card">
         <div>
-          <span class="demo-badge">Prototype local</span>
-          <h2>Bonjour Dr Guillaume Leblanc</h2>
+          <span class="demo-badge">Horaire partagé</span>
+          <h2 id="welcome-user-name">Bonjour</h2>
           <p>Consultez l'horaire de garde le plus à jour et gérez vos demandes d'échanges.</p>
         </div>
         <div class="next-shift">
@@ -37,10 +56,9 @@
       </section>
 
       <section id="security-notice" class="notice-card">
-        <strong>Mode démonstration</strong>
+        <strong>Connexion sécurisée</strong>
         <p>
-          Les données sont enregistrées uniquement sur cet appareil. Une connexion
-          institutionnelle et une base centrale seront nécessaires avant la diffusion réelle.
+          Les horaires et demandes d'échange sont synchronisés avec le serveur central.
         </p>
       </section>
 
@@ -207,10 +225,10 @@
           </div>
         </div>
         <article class="profile-card">
-          <div class="profile-avatar">GL</div>
+          <div id="profile-avatar" class="profile-avatar">GL</div>
           <div>
-            <strong>Guillaume Leblanc</strong>
-            <p>Intensiviste · Compte de démonstration</p>
+            <strong id="profile-full-name">Utilisateur</strong>
+            <p id="profile-role">Compte connecté</p>
           </div>
         </article>
         <section class="notification-settings">
@@ -335,6 +353,10 @@
                 <option value="admin">Administrateur</option>
               </select>
             </label>
+            <label>
+              <span id="user-admin-password-label">Nouveau mot de passe (facultatif)</span>
+              <input id="user-admin-password" type="password" minlength="12" autocomplete="new-password" />
+            </label>
           </div>
           <label class="toggle-row">
             <input id="user-admin-active" type="checkbox" />
@@ -351,13 +373,13 @@
         <p id="ios-install-help" class="notice-card" hidden>
           Sur iPhone ou iPad, utilisez le bouton Partager de Safari, puis « Sur l'écran d'accueil ».
         </p>
-        <button id="reset-demo" class="secondary-button full-width" type="button">
-          Réinitialiser la démonstration
+        <button id="logout-button" class="secondary-button full-width" type="button">
+          Se déconnecter
         </button>
       </section>
     </main>
 
-    <nav class="bottom-nav" aria-label="Navigation principale">
+    <nav id="app-nav" class="bottom-nav" aria-label="Navigation principale" hidden>
       <button class="nav-button active" data-target="annual" type="button">
         <svg class="nav-icon annual-calendar-icon" viewBox="0 0 28 24" aria-hidden="true">
           <rect class="calendar-shell" x="1.5" y="3.5" width="25" height="19" rx="3" />
@@ -448,7 +470,8 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <script src="vendor-xlsx.full.min.js"></script>
-    <script src="app.js?v=79"></script>
+    <script src="api-client.js?v=1"></script>
+    <script src="app.js?v=80"></script>
     <script src="pwa.js?v=1"></script>
   </body>
 </html>
