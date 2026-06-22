@@ -44,20 +44,24 @@ button { cursor: pointer; }
   background: white;
   box-shadow: 0 28px 80px rgba(0,0,0,.28);
 }
-.login-card h1 { color: var(--navy); font-size: 1.8rem; }
 .login-card > p:not(.section-kicker):not(.login-error) { margin-bottom: 6px; color: var(--muted); line-height: 1.45; }
-.login-brand {
-  display: grid;
-  place-items: center;
-  width: 58px;
-  height: 58px;
-  border: 3px solid #a9dfda;
-  border-radius: 50%;
-  color: white;
-  background: var(--teal);
-  font-size: 1.05rem;
-  font-weight: 900;
+.brand-logo-crop {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 3 / 1;
+  border-radius: 14px;
+  background: white;
 }
+.brand-logo-crop img {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: auto;
+  transform: translateY(-50%);
+}
+.login-logo { width: 100%; border: 1px solid #e6edf1; }
 .login-error { margin: 0; padding: 10px 12px; border-radius: 10px; color: var(--danger); background: #fde8e6; font-size: .82rem; }
 
 .topbar {
@@ -72,6 +76,19 @@ button { cursor: pointer; }
   background: linear-gradient(135deg, var(--navy-deep), var(--navy));
   box-shadow: 0 8px 24px rgba(12, 48, 69, 0.18);
 }
+.topbar-brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+}
+.topbar-logo {
+  flex: 0 0 auto;
+  width: clamp(155px, 19vw, 220px);
+  border: 1px solid rgba(255,255,255,.3);
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+}
+.topbar-copy { min-width: 0; }
 
 .eyebrow, .section-kicker {
   margin: 0 0 3px;
@@ -1005,6 +1022,13 @@ input, select, textarea { width: 100%; border: 1px solid var(--line); border-rad
 .empty-card { color: var(--muted); text-align: center; box-shadow: none; }
 
 @media (max-width: 560px) {
+  .login-card { padding: 22px; }
+  .topbar { padding-block: 12px; }
+  .topbar-brand { gap: 9px; }
+  .topbar-logo { width: 145px; border-radius: 10px; }
+  .topbar-copy .eyebrow { display: none; }
+  .topbar-copy h1 { font-size: .9rem; white-space: nowrap; }
+  .avatar-button { width: 40px; height: 40px; }
   .welcome-card { grid-template-columns: 1fr; }
   .next-shift { min-height: 78px; }
   .assignment-grid { grid-template-columns: 1fr; }

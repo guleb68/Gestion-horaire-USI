@@ -1,5 +1,5 @@
-const CACHE_NAME = "horaire-usi-partage-v83";
-const APP_SHELL = ["./", "./index.html", "./styles.css", "./vendor-xlsx.full.min.js", "./api-client.js?v=2", "./app.js?v=83", "./pwa.js?v=1", "./manifest.webmanifest", "./icons/icon-512.png", "./icons/icon-192.png"];
+const CACHE_NAME = "horaire-usi-partage-v85";
+const APP_SHELL = ["./", "./index.html", "./styles.css?v=84", "./assets/logo-medi-cal.png", "./vendor-xlsx.full.min.js", "./api-client.js?v=2", "./app.js?v=83", "./pwa.js?v=1", "./manifest.webmanifest?v=85", "./icons/icon-180.png", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-192.png", "./icons/icon-maskable-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));

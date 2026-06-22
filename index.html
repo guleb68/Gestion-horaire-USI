@@ -5,19 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#123f59" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Mon horaire USI" />
+    <meta name="apple-mobile-web-app-title" content="Medi-CAL" />
     <meta name="description" content="Consultation et échanges de l'horaire des soins intensifs." />
-    <title>Partage de l'horaire USI</title>
-    <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="icons/icon-192.png" />
-    <link rel="stylesheet" href="styles.css" />
+    <title>Medi-CAL | Horaire USI</title>
+    <link rel="manifest" href="manifest.webmanifest?v=85" />
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png" />
+    <link rel="stylesheet" href="styles.css?v=84" />
   </head>
   <body>
     <section id="login-screen" class="login-screen">
       <form id="login-form" class="login-card">
-        <div class="login-brand">USI</div>
+        <div class="brand-logo-crop login-logo">
+          <img src="assets/logo-medi-cal.png" alt="Medi-CAL, application de gestion d'horaire médical" />
+        </div>
         <p class="section-kicker">Accès sécurisé</p>
-        <h1>Mon horaire</h1>
         <p>Service de soins intensifs du CHU de Québec - Université Laval</p>
         <label>
           Code utilisateur
@@ -33,9 +34,14 @@
     </section>
 
     <header id="app-header" class="topbar" hidden>
-      <div>
-        <p class="eyebrow">Service de soins intensifs du CHU de Québec - Université Laval</p>
-        <h1>Mon horaire</h1>
+      <div class="topbar-brand">
+        <div class="brand-logo-crop topbar-logo">
+          <img src="assets/logo-medi-cal.png" alt="Medi-CAL" />
+        </div>
+        <div class="topbar-copy">
+          <p class="eyebrow">Service de soins intensifs du CHU de Québec - Université Laval</p>
+          <h1>Mon horaire</h1>
+        </div>
       </div>
       <button id="profile-button" class="avatar-button" type="button" aria-label="Ouvrir le profil">
         GL
