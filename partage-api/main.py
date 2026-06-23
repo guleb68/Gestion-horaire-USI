@@ -159,7 +159,10 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="API Horaire USI", version="0.1.0", lifespan=lifespan)
-origins = [item.strip() for item in os.environ.get("ALLOWED_ORIGINS", "").split(",") if item.strip()]
+origins = sorted({
+    "https://gestion-horaire-usi-hej.onrender.com",
+    *[item.strip().rstrip("/") for item in os.environ.get("ALLOWED_ORIGINS", "").split(",") if item.strip()],
+})
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
