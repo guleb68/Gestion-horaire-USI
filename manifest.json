@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "Medi-CAL - Horaire USI",
+  "short_name": "Medi-CAL",
+  "description": "Consultation et échanges de l'horaire des soins intensifs.",
+  "lang": "fr-CA",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f7f8",
+  "theme_color": "#123f59",
+  "icons": [
+    { "src": "icons/medi-cal-v2-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/medi-cal-v2-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/medi-cal-v2-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/medi-cal-v2-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
