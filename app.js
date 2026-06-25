@@ -298,10 +298,10 @@ async function initializeApplication() {
   }
   if (!API.hasSession()) {
     showLogin();
+    API.wake().catch(() => {});
     return;
   }
   try {
-    await API.wake();
     currentAccount = await API.me();
     CURRENT_USER = currentAccount.code;
     await loadSharedData();
@@ -317,7 +317,7 @@ async function handleLogin(event) {
   const submit = document.getElementById("login-submit");
   const errorLabel = document.getElementById("login-error");
   submit.disabled = true;
-  submit.textContent = "Connexion au serveur...";
+  submit.textContent = "Vérification...";
   errorLabel.hidden = true;
   try {
     currentAccount = await API.login(
@@ -382,9 +382,10 @@ function updateAuthenticatedIdentity() {
 async function loadSharedData() {
   const previousActiveYear = Number(state.activeYear) || APP_CURRENT_YEAR;
   const years = [APP_CURRENT_YEAR, APP_CURRENT_YEAR + 1];
-  const [users, swaps, ...schedules] = await Promise.all([
+  const [users, swaps, auditRows, ...schedules] = await Promise.all([
     API.users(),
     API.swaps(),
+    isAdmin() ? API.audit().catch(() => []) : Promise.resolve([]),
     ...years.map((year) => API.schedule(year)),
   ]);
   state.users = users.map(apiUserToLocal);
@@ -392,11 +393,7 @@ async function loadSharedData() {
   state.schedulesByYear = {};
   state.cellOverrides = {};
   schedules.forEach((payload, index) => applyApiSchedule(years[index], payload));
-  if (isAdmin()) {
-    try { state.auditTrail = (await API.audit()).map(apiAuditToLocal); } catch { state.auditTrail = []; }
-  } else {
-    state.auditTrail = [];
-  }
+  state.auditTrail = isAdmin() ? auditRows.map(apiAuditToLocal) : [];
   state.activeYear = [APP_CURRENT_YEAR, APP_CURRENT_YEAR + 1].includes(previousActiveYear) ? previousActiveYear : APP_CURRENT_YEAR;
   saveState();
 }

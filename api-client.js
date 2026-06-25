@@ -12,13 +12,23 @@
 
   const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+  async function fetchWithTimeout(url, options = {}, timeout = 15000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function wake() {
     const delays = [0, 1500, 2500, 4000, 6000, 8000, 10000, 12000, 15000];
     for (let attempt = 0; attempt < delays.length; attempt += 1) {
       if (delays[attempt]) await sleep(delays[attempt]);
       window.dispatchEvent(new CustomEvent("horaire:api-wakeup", { detail: { attempt: attempt + 1 } }));
       try {
-        const response = await fetch(`${API_BASE_URL}/health`, { cache: "no-store" });
+        const response = await fetchWithTimeout(`${API_BASE_URL}/health`, { cache: "no-store" });
         const payload = await response.json().catch(() => null);
         if (response.ok && payload?.status === "ok") return;
       } catch {}
@@ -34,7 +44,7 @@
     const attempts = retry ? 3 : 1;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        const response = await fetch(`${API_BASE_URL}${path}`, { ...fetchOptions, headers, cache: "no-store" });
+        const response = await fetchWithTimeout(`${API_BASE_URL}${path}`, { ...fetchOptions, headers, cache: "no-store" }, 30000);
         let payload = null;
         try { payload = await response.json(); } catch {}
         if (response.ok && payload !== null) return payload;
@@ -62,7 +72,6 @@
     hasSession: () => Boolean(token()),
     wake,
     login: async (code, password) => {
-      await wake();
       const result = await request("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ code, password }),
