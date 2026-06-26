@@ -1150,13 +1150,13 @@ function rosterCell(cell) {
 }
 
 function renderNextShift() {
+  const today = startOfDay(new Date());
   const mine = allAssignments()
     .filter((assignment) => assignment.code === CURRENT_USER)
     .map((assignment) => ({ ...assignment, sortDate: parseFrenchDate(assignment.dayDate) }))
+    .filter((assignment) => assignment.sortDate && assignment.sortDate >= today)
     .sort((left, right) => {
-      const leftTime = left.sortDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      const rightTime = right.sortDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      return leftTime - rightTime || left.weekNumber - right.weekNumber || left.dayIndex - right.dayIndex;
+      return left.sortDate.getTime() - right.sortDate.getTime() || left.weekNumber - right.weekNumber || left.dayIndex - right.dayIndex;
     });
   const next = mine[0];
   document.getElementById("next-shift-label").textContent = next ? `${next.dayDate} · ${next.sourceTask || next.task}` : "Aucune affectation";
