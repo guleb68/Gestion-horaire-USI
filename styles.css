@@ -928,6 +928,13 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
 .nav-button { position: relative; display: grid; justify-items: center; gap: 2px; border: 0; padding: 5px 2px; color: var(--muted); background: transparent; font-size: .66rem; font-weight: 750; }
 .nav-button.active { color: var(--teal); }
 .nav-icon { font-size: 1.2rem; }
+.nav-image-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 50%;
+}
 .annual-calendar-icon {
   display: block;
   width: 28px;
