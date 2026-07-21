@@ -74,6 +74,7 @@ def initialize_database() -> None:
                 phone text NOT NULL DEFAULT '',
                 role text NOT NULL CHECK (role IN ('admin', 'intensiviste')),
                 active boolean NOT NULL DEFAULT true,
+                must_change_password boolean NOT NULL DEFAULT false,
                 password_hash text NOT NULL,
                 created_at timestamptz NOT NULL DEFAULT now(),
                 updated_at timestamptz NOT NULL DEFAULT now()
@@ -127,6 +128,7 @@ def initialize_database() -> None:
 
             ALTER TABLE schedules DROP CONSTRAINT IF EXISTS schedules_doctor_code_fkey;
             ALTER TABLE duty_overrides DROP CONSTRAINT IF EXISTS duty_overrides_doctor_code_fkey;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;
             """
         )
         bootstrap_admin(connection)
@@ -177,6 +179,15 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=12, max_length=200)
+
+
+class PasswordRecoveryRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+
+
 class UserResponse(BaseModel):
     code: str
     full_name: str
@@ -184,6 +195,7 @@ class UserResponse(BaseModel):
     phone: str
     role: Literal["admin", "intensiviste"]
     active: bool
+    must_change_password: bool = False
 
 
 class Assignment(BaseModel):
@@ -255,7 +267,7 @@ def current_user(authorization: Annotated[Optional[str], Header()] = None) -> di
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session invalide") from error
     with database() as connection:
         user = connection.execute(
-            "SELECT code, full_name, email, phone, role, active FROM users WHERE code = %s",
+            "SELECT code, full_name, email, phone, role, active, must_change_password FROM users WHERE code = %s",
             (str(payload.get("sub", "")).upper(),),
         ).fetchone()
     if not user or not user["active"]:
@@ -272,7 +284,7 @@ def require_admin(user: dict) -> None:
 
 
 def public_user(user: dict) -> dict:
-    return {key: user[key] for key in ("code", "full_name", "email", "phone", "role", "active")}
+    return {key: user[key] for key in ("code", "full_name", "email", "phone", "role", "active", "must_change_password")}
 
 
 def assignment_code(value: Optional[dict]) -> str:
@@ -442,11 +454,24 @@ def health() -> dict:
 
 @app.post("/api/auth/login")
 def login(credentials: LoginRequest) -> dict:
+    identifier = credentials.code.strip()
     with database() as connection:
-        user = connection.execute("SELECT * FROM users WHERE code = %s", (credentials.code.strip().upper(),)).fetchone()
+        user = connection.execute(
+            """
+            SELECT * FROM users
+            WHERE code = %s OR lower(email) = lower(%s)
+            """,
+            (identifier.upper(), identifier),
+        ).fetchone()
     if not user or not user["active"] or not verify_password(credentials.password, user["password_hash"]):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Code ou mot de passe invalide")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Courriel ou mot de passe invalide")
     return {"access_token": issue_token(user), "token_type": "bearer", "user": public_user(user)}
+
+
+@app.post("/api/auth/recover-password")
+def recover_password(payload: PasswordRecoveryRequest) -> dict:
+    # Simulation securitaire: ne revele jamais si le courriel existe.
+    return {"status": "ok", "message": "Si ce courriel existe, l'administrateur pourra reinitialiser le mot de passe temporaire."}
 
 
 @app.get("/api/me", response_model=UserResponse)
@@ -454,16 +479,38 @@ def me(user: CurrentUser) -> dict:
     return public_user(user)
 
 
+@app.post("/api/me/password", response_model=UserResponse)
+def change_password(payload: PasswordChangeRequest, user: CurrentUser) -> dict:
+    with database() as connection:
+        full_user = connection.execute("SELECT * FROM users WHERE code = %s", (user["code"],)).fetchone()
+        if not full_user or not verify_password(payload.current_password, full_user["password_hash"]):
+            raise HTTPException(status_code=401, detail="Mot de passe actuel invalide")
+        saved = connection.execute(
+            """
+            UPDATE users
+            SET password_hash = %s,
+                must_change_password = false,
+                updated_at = now()
+            WHERE code = %s
+            RETURNING code, full_name, email, phone, role, active, must_change_password
+            """,
+            (hash_password(payload.new_password), user["code"]),
+        ).fetchone()
+        audit(connection, user["code"], "password.changed", "user", user["code"], {})
+        connection.commit()
+    return public_user(saved)
+
+
 @app.get("/api/users", response_model=list[UserResponse])
 def users(user: CurrentUser) -> list[dict]:
     with database() as connection:
         if user["role"] == "admin":
             rows = connection.execute(
-                "SELECT code, full_name, email, phone, role, active FROM users ORDER BY full_name"
+                "SELECT code, full_name, email, phone, role, active, must_change_password FROM users ORDER BY full_name"
             ).fetchall()
         else:
             rows = connection.execute(
-                "SELECT code, full_name, email, phone, role, active FROM users WHERE active = true ORDER BY full_name"
+                "SELECT code, full_name, email, phone, role, active, must_change_password FROM users WHERE active = true ORDER BY full_name"
             ).fetchall()
     if user["role"] == "admin":
         return [public_user(row) for row in rows]
@@ -483,11 +530,12 @@ def save_user(payload: UserUpsert, user: CurrentUser) -> dict:
         if not existing and not payload.password:
             raise HTTPException(status_code=400, detail="Un mot de passe initial est requis")
         password_hash = hash_password(payload.password) if payload.password else existing["password_hash"]
+        must_change_password = True if payload.password else bool(existing["must_change_password"])
         try:
             saved = connection.execute(
                 """
-                INSERT INTO users (code, full_name, email, phone, role, active, password_hash)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO users (code, full_name, email, phone, role, active, password_hash, must_change_password)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (code) DO UPDATE SET
                     full_name = EXCLUDED.full_name,
                     email = EXCLUDED.email,
@@ -495,10 +543,11 @@ def save_user(payload: UserUpsert, user: CurrentUser) -> dict:
                     role = EXCLUDED.role,
                     active = EXCLUDED.active,
                     password_hash = EXCLUDED.password_hash,
+                    must_change_password = EXCLUDED.must_change_password,
                     updated_at = now()
-                RETURNING code, full_name, email, phone, role, active
+                RETURNING code, full_name, email, phone, role, active, must_change_password
                 """,
-                (code, payload.full_name.strip(), email, payload.phone.strip(), payload.role, payload.active, password_hash),
+                (code, payload.full_name.strip(), email, payload.phone.strip(), payload.role, payload.active, password_hash, must_change_password),
             ).fetchone()
         except psycopg.errors.UniqueViolation as error:
             raise HTTPException(status_code=409, detail="Ce courriel est deja utilise") from error
