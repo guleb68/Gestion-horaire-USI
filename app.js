@@ -157,6 +157,7 @@ const yearSelect = document.getElementById("year-select");
 const importYearSelect = document.getElementById("import-year-select");
 const weekSelect = document.getElementById("week-select");
 const exportAnnualPdf = document.getElementById("export-annual-pdf");
+const annualAdminTools = document.getElementById("annual-admin-tools");
 const deleteAnnualScheduleButton = document.getElementById("delete-annual-schedule");
 const toast = document.getElementById("toast");
 
@@ -491,6 +492,7 @@ function isAdmin() {
 function renderAdminControls() {
   const admin = isAdmin();
   importPanel.hidden = !admin;
+  annualAdminTools.hidden = !admin;
   deleteAnnualScheduleButton.hidden = !admin;
   adminDirectSwap.hidden = !admin;
   holidayUploadPanel.hidden = !admin;

@@ -334,6 +334,28 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
 .annual-heading-actions label {
   min-width: 150px;
 }
+.annual-admin-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 12px;
+  padding: 12px;
+  border: 1px solid #f3c7c2;
+  border-radius: 16px;
+  background: #fff6f5;
+}
+.annual-admin-tools div {
+  display: grid;
+  gap: 3px;
+}
+.annual-admin-tools strong {
+  color: var(--danger);
+}
+.annual-admin-tools span {
+  color: var(--muted);
+  font-size: .82rem;
+}
 .annual-table-scroll {
   overflow-x: auto;
   overscroll-behavior-inline: contain;
@@ -1041,6 +1063,7 @@ input, select, textarea { width: 100%; border: 1px solid var(--line); border-rad
   .next-shift { min-height: 78px; }
   .assignment-grid { grid-template-columns: 1fr; }
   .import-panel { grid-template-columns: 1fr; }
+  .annual-admin-tools { align-items: stretch; flex-direction: column; }
   .schedule-controls { grid-template-columns: 1fr; }
   .weekly-exchange-bar { display: grid; }
   .admin-swap-grid { grid-template-columns: 1fr; }

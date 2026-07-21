@@ -11,7 +11,7 @@
     <link rel="manifest" href="manifest.json?v=87" />
     <link rel="apple-touch-icon" sizes="180x180" href="icons/medi-cal-v3-180.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="icons/medi-cal-v3-192.png" />
-    <link rel="stylesheet" href="styles.css?v=86" />
+    <link rel="stylesheet" href="styles.css?v=87" />
   </head>
   <body>
     <section id="login-screen" class="login-screen">
@@ -113,7 +113,6 @@
                 <input id="csv-input" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" />
               </label>
             </div>
-            <button id="delete-annual-schedule" class="secondary-button danger-button compact" type="button">Supprimer l'année</button>
             <button id="export-annual-pdf" class="primary-button compact" type="button">Exporter PDF</button>
           </div>
         </div>
@@ -123,6 +122,13 @@
         <p id="annual-status" class="muted-copy" hidden>
           L'horaire complet est affiché dans le même format synthèse que le fichier importé.
         </p>
+        <div id="annual-admin-tools" class="annual-admin-tools" hidden>
+          <div>
+            <strong>Gestion administrateur</strong>
+            <span>Supprimez l'horaire de l'année affichée avant d'importer une nouvelle version.</span>
+          </div>
+          <button id="delete-annual-schedule" class="secondary-button danger-button compact" type="button">Supprimer l'horaire annuel affiché</button>
+        </div>
         <div class="annual-table-card">
           <div class="annual-table-scroll">
             <table class="annual-roster-table">
@@ -479,7 +485,7 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <script src="vendor-xlsx.full.min.js"></script>
     <script src="api-client.js?v=5"></script>
-    <script src="app.js?v=86"></script>
+    <script src="app.js?v=87"></script>
     <script src="pwa.js?v=1"></script>
   </body>
 </html>
