@@ -90,6 +90,7 @@
       method: "POST",
       body: JSON.stringify({ weeks }),
     }),
+    deleteSchedule: (year) => request(`/api/admin/schedules/${encodeURIComponent(year)}`, { method: "DELETE" }),
     swaps: () => request("/api/swaps", { retry: true }),
     createSwap: (swap) => request("/api/swaps", { method: "POST", body: JSON.stringify(swap) }),
     directSwap: (swap) => request("/api/admin/swaps/direct", { method: "POST", body: JSON.stringify(swap) }),

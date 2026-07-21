@@ -656,6 +656,7 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
 }
 .primary-button { color: white; background: var(--teal); }
 .secondary-button { color: var(--navy); background: var(--blue-soft); }
+.danger-button { color: var(--danger); background: #fde8e6; }
 .compact { padding: 8px 12px; }
 .full-width { width: 100%; margin-top: 12px; }
 .import-button { color: var(--navy); background: var(--blue-soft); font-size: .8rem; cursor: pointer; }

@@ -157,6 +157,7 @@ const yearSelect = document.getElementById("year-select");
 const importYearSelect = document.getElementById("import-year-select");
 const weekSelect = document.getElementById("week-select");
 const exportAnnualPdf = document.getElementById("export-annual-pdf");
+const deleteAnnualScheduleButton = document.getElementById("delete-annual-schedule");
 const toast = document.getElementById("toast");
 
 document.querySelectorAll(".nav-button").forEach((button) => {
@@ -193,6 +194,7 @@ document.getElementById("new-user-admin").addEventListener("click", startNewUser
 document.getElementById("cancel-new-user-admin").addEventListener("click", cancelNewUserAdmin);
 document.getElementById("save-user-admin").addEventListener("click", saveUserAdmin);
 exportAnnualPdf.addEventListener("click", exportAnnualToPdf);
+deleteAnnualScheduleButton.addEventListener("click", deleteAnnualSchedule);
 csvInput.addEventListener("change", importScheduleFile);
 holidayPdfInput.addEventListener("change", importHolidayPdf);
 hsfaPdfInput.addEventListener("change", importHsfaPdf);
@@ -489,6 +491,7 @@ function isAdmin() {
 function renderAdminControls() {
   const admin = isAdmin();
   importPanel.hidden = !admin;
+  deleteAnnualScheduleButton.hidden = !admin;
   adminDirectSwap.hidden = !admin;
   holidayUploadPanel.hidden = !admin;
   hsfaUploadPanel.hidden = !admin;
@@ -1577,6 +1580,41 @@ async function importScheduleFile(event) {
     showToast(error.message);
   } finally {
     event.target.value = "";
+  }
+}
+
+async function deleteAnnualSchedule() {
+  if (!isAdmin()) {
+    showToast("Suppression réservée à l'administrateur.");
+    return;
+  }
+  const targetYear = Number(annualYearSelect.value) || Number(state.activeYear);
+  const scheduleLength = state.schedulesByYear?.[targetYear]?.length || 0;
+  const confirmation = [
+    `Supprimer l'horaire annuel ${targetYear}?`,
+    "",
+    `Cette action effacera ${scheduleLength} semaine(s), les modifications partielles et les demandes d'échange liées à cette année.`,
+    "Vous pourrez ensuite importer une nouvelle version Excel ou CSV.",
+  ].join("\n");
+  if (!confirm(confirmation)) return;
+  deleteAnnualScheduleButton.disabled = true;
+  deleteAnnualScheduleButton.textContent = "Suppression...";
+  try {
+    const result = await API.deleteSchedule(targetYear);
+    await refreshSharedData();
+    state.schedulesByYear[targetYear] = [];
+    state.sourceByYear ||= {};
+    state.sourceByYear[targetYear] = "Aucun fichier importé";
+    state.importIssues = (state.importIssues || []).filter((issue) => Number(issue.year) !== targetYear);
+    saveState();
+    renderAll();
+    importStatus.textContent = `Horaire annuel ${targetYear} supprimé. Vous pouvez maintenant importer une nouvelle version.`;
+    showToast(`Horaire ${targetYear} supprimé (${result.assignments || 0} affectation(s)).`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    deleteAnnualScheduleButton.disabled = false;
+    deleteAnnualScheduleButton.textContent = "Supprimer l'année";
   }
 }
 
