@@ -85,6 +85,11 @@
     me: () => request("/api/me", { retry: true }),
     users: () => request("/api/users", { retry: true }),
     saveUser: (user) => request("/api/admin/users", { method: "POST", body: JSON.stringify(user) }),
+    changePassword: (passwords) => request("/api/me/password", { method: "POST", body: JSON.stringify(passwords) }),
+    recoverPassword: (email) => request("/api/auth/recover-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
     schedule: (year) => request(`/api/schedules?year=${encodeURIComponent(year)}`, { retry: true }),
     replaceSchedule: (year, weeks) => request(`/api/admin/schedules/${encodeURIComponent(year)}`, {
       method: "POST",

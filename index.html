@@ -22,8 +22,8 @@
         <p class="section-kicker">Accès sécurisé</p>
         <p>Service de soins intensifs du CHU de Québec - Université Laval</p>
         <label>
-          Code utilisateur
-          <input id="login-code" type="text" autocomplete="username" autocapitalize="characters" required />
+          Courriel
+          <input id="login-code" type="email" autocomplete="username" autocapitalize="off" required />
         </label>
         <label>
           Mot de passe
@@ -31,6 +31,7 @@
         </label>
         <p id="login-error" class="login-error" role="alert" hidden></p>
         <button id="login-submit" class="primary-button full-width" type="submit">Se connecter</button>
+        <button id="recover-password-button" class="secondary-button full-width" type="button">Mot de passe oublié</button>
       </form>
     </section>
 
@@ -238,6 +239,32 @@
             <p id="profile-role">Compte connecté</p>
           </div>
         </article>
+        <section id="password-panel" class="notification-settings">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Sécurité</p>
+              <h2>Mot de passe</h2>
+            </div>
+          </div>
+          <p id="password-required-note" class="validation-note" hidden>
+            Vous utilisez un mot de passe temporaire. Veuillez choisir un nouveau mot de passe.
+          </p>
+          <div class="admin-swap-grid">
+            <label>
+              Mot de passe actuel
+              <input id="current-password" type="password" autocomplete="current-password" />
+            </label>
+            <label>
+              Nouveau mot de passe
+              <input id="new-password" type="password" minlength="12" autocomplete="new-password" />
+            </label>
+            <label>
+              Confirmer le nouveau mot de passe
+              <input id="confirm-password" type="password" minlength="12" autocomplete="new-password" />
+            </label>
+          </div>
+          <button id="change-password-button" class="primary-button" type="button">Modifier mon mot de passe</button>
+        </section>
         <section class="notification-settings">
           <div class="section-heading">
             <div>
@@ -338,7 +365,7 @@
               <select id="user-admin-select"></select>
             </label>
             <label>
-              Code
+              Code d'horaire
               <input id="user-admin-code" type="text" />
             </label>
             <label>
@@ -346,7 +373,7 @@
               <input id="user-admin-name" type="text" />
             </label>
             <label>
-              Courriel
+              Courriel / nom d'utilisateur
               <input id="user-admin-email" type="email" />
             </label>
             <label>
@@ -361,7 +388,7 @@
               </select>
             </label>
             <label>
-              <span id="user-admin-password-label">Nouveau mot de passe (facultatif)</span>
+              <span id="user-admin-password-label">Nouveau mot de passe temporaire (facultatif)</span>
               <input id="user-admin-password" type="password" minlength="12" autocomplete="new-password" />
             </label>
           </div>
@@ -477,8 +504,8 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <script src="vendor-xlsx.full.min.js"></script>
-    <script src="api-client.js?v=5"></script>
-    <script src="app.js?v=87"></script>
+    <script src="api-client.js?v=6"></script>
+    <script src="app.js?v=88"></script>
     <script src="pwa.js?v=1"></script>
   </body>
 </html>

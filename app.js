@@ -12,7 +12,7 @@ const ANNUAL_TASK_COLUMNS = [
 ];
 const DOCTOR_NAMES = {
   AV: "Abel Vanderschuren", AT: "Alexis Turgeon", CF: "Charles Francoeur",
-  EB: "Eric Brassard", FLAU: "Francois Lauzier", GLEB: "Guillaume Leblanc",
+  EB: "Eric Brassard", FD: "Francis Desmeules", FLAU: "Francois Lauzier", GLEB: "Guillaume Leblanc",
   JFS: "Jean-Francois Shields", JG: "Josee Gagnon", LB: "Laurence Brunet",
   MAL: "Marc-Antoine Lepage", RBEN: "Reda Bensaidane", SDM: "Simon Demers-Marcil",
   SL: "Stephanie Leclerc", VT: "Vincent Trottier",
@@ -151,6 +151,10 @@ const userAdminPassword = document.getElementById("user-admin-password");
 const userAdminPasswordLabel = document.getElementById("user-admin-password-label");
 const userAdminActive = document.getElementById("user-admin-active");
 const cancelNewUserAdminButton = document.getElementById("cancel-new-user-admin");
+const currentPasswordInput = document.getElementById("current-password");
+const newPasswordInput = document.getElementById("new-password");
+const confirmPasswordInput = document.getElementById("confirm-password");
+const passwordRequiredNote = document.getElementById("password-required-note");
 const scheduleSearch = document.getElementById("schedule-search");
 const annualYearSelect = document.getElementById("annual-year-select");
 const yearSelect = document.getElementById("year-select");
@@ -177,7 +181,9 @@ document.getElementById("profile-button").addEventListener("click", () => showVi
 document.getElementById("open-swap-form").addEventListener("click", () => openSwapDialog());
 document.getElementById("close-swap-form").addEventListener("click", () => swapDialog.close());
 document.getElementById("login-form").addEventListener("submit", handleLogin);
+document.getElementById("recover-password-button").addEventListener("click", recoverPassword);
 document.getElementById("logout-button").addEventListener("click", logout);
+document.getElementById("change-password-button").addEventListener("click", changePassword);
 window.addEventListener("horaire:session-expired", () => {
   CURRENT_USER = "";
   currentAccount = null;
@@ -309,6 +315,10 @@ async function initializeApplication() {
     CURRENT_USER = currentAccount.code;
     await loadSharedData();
     showAuthenticatedApplication();
+    if (currentAccount.must_change_password) {
+      showView("profile");
+      showToast("Veuillez modifier votre mot de passe temporaire.");
+    }
   } catch (error) {
     API.logout();
     showLogin(error.message);
@@ -324,13 +334,17 @@ async function handleLogin(event) {
   errorLabel.hidden = true;
   try {
     currentAccount = await API.login(
-      document.getElementById("login-code").value.trim().toUpperCase(),
+      document.getElementById("login-code").value.trim(),
       document.getElementById("login-password").value,
     );
     CURRENT_USER = currentAccount.code;
     await loadSharedData();
     document.getElementById("login-form").reset();
     showAuthenticatedApplication();
+    if (currentAccount.must_change_password) {
+      showView("profile");
+      showToast("Veuillez modifier votre mot de passe temporaire.");
+    }
   } catch (error) {
     API.logout();
     errorLabel.textContent = error.message === "Failed to fetch"
@@ -340,6 +354,24 @@ async function handleLogin(event) {
   } finally {
     submit.disabled = false;
     submit.textContent = "Se connecter";
+  }
+}
+
+async function recoverPassword() {
+  const email = document.getElementById("login-code").value.trim();
+  const errorLabel = document.getElementById("login-error");
+  if (!email) {
+    errorLabel.textContent = "Inscrivez d'abord votre courriel, puis cliquez sur Mot de passe oublié.";
+    errorLabel.hidden = false;
+    return;
+  }
+  try {
+    const result = await API.recoverPassword(email);
+    errorLabel.textContent = result.message || "Demande de récupération transmise.";
+    errorLabel.hidden = false;
+  } catch (error) {
+    errorLabel.textContent = error.message;
+    errorLabel.hidden = false;
   }
 }
 
@@ -379,7 +411,39 @@ function updateAuthenticatedIdentity() {
   document.getElementById("profile-avatar").textContent = initials;
   document.getElementById("profile-full-name").textContent = name;
   document.getElementById("profile-role").textContent = currentAccount?.role === "admin" ? "Administrateur" : "Intensiviste";
+  passwordRequiredNote.hidden = !currentAccount?.must_change_password;
   document.querySelector(".profile-nav-icon").textContent = CURRENT_USER;
+}
+
+async function changePassword() {
+  const currentPassword = currentPasswordInput.value;
+  const newPassword = newPasswordInput.value;
+  const confirmPassword = confirmPasswordInput.value;
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    showToast("Complétez les trois champs de mot de passe.");
+    return;
+  }
+  if (newPassword.length < 12) {
+    showToast("Le nouveau mot de passe doit contenir au moins 12 caractères.");
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    showToast("La confirmation ne correspond pas au nouveau mot de passe.");
+    return;
+  }
+  try {
+    currentAccount = await API.changePassword({
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+    currentPasswordInput.value = "";
+    newPasswordInput.value = "";
+    confirmPasswordInput.value = "";
+    updateAuthenticatedIdentity();
+    showToast("Mot de passe modifié.");
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
 async function loadSharedData() {
@@ -407,7 +471,7 @@ async function refreshSharedData() {
 }
 
 function apiUserToLocal(user) {
-  return { code: user.code, name: user.full_name, email: user.email, phone: user.phone || "", role: user.role, active: user.active !== false };
+  return { code: user.code, name: user.full_name, email: user.email, phone: user.phone || "", role: user.role, active: user.active !== false, mustChangePassword: user.must_change_password === true };
 }
 
 function apiSwapToLocal(request) {
@@ -584,7 +648,11 @@ function renderUserAdmin() {
   if (!isAdmin()) return;
   state.users = normalizeUsers(state.users);
   const selected = userAdminSelect.value || CURRENT_USER;
-  userAdminSelect.innerHTML = state.users.map((user) => `<option value="${escapeHtml(user.code)}" ${user.code === selected ? "selected" : ""}>${escapeHtml(user.code)} · ${escapeHtml(user.name)}</option>`).join("");
+  userAdminSelect.innerHTML = state.users.map((user) => {
+    const temporary = user.mustChangePassword ? " · temporaire" : "";
+    const email = user.email ? ` · ${user.email}` : "";
+    return `<option value="${escapeHtml(user.code)}" ${user.code === selected ? "selected" : ""}>${escapeHtml(user.code)} · ${escapeHtml(user.name)}${escapeHtml(email)}${temporary}</option>`;
+  }).join("");
   if (!state.users.some((user) => user.code === userAdminSelect.value)) userAdminSelect.value = state.users[0]?.code || "";
   if (userAdminMode === "new") renderNewUserAdmin();
   else renderSelectedUserAdmin();
@@ -594,7 +662,9 @@ function renderSelectedUserAdmin() {
   userAdminMode = "edit";
   userAdminSelect.disabled = false;
   cancelNewUserAdminButton.hidden = true;
-  userAdminModeLabel.textContent = "Modification d'un utilisateur existant.";
+  userAdminModeLabel.textContent = user.mustChangePassword
+    ? "Modification d'un utilisateur existant. Mot de passe temporaire actif : l'utilisateur devra le changer à sa prochaine connexion."
+    : "Modification d'un utilisateur existant.";
   const user = userByCode(userAdminSelect.value) || state.users?.[0] || {};
   userAdminCode.value = user.code || "";
   userAdminCode.disabled = true;
@@ -605,7 +675,7 @@ function renderSelectedUserAdmin() {
   userAdminActive.checked = user.active !== false;
   userAdminPassword.value = "";
   userAdminPassword.required = false;
-  userAdminPasswordLabel.textContent = "Nouveau mot de passe (facultatif)";
+  userAdminPasswordLabel.textContent = "Nouveau mot de passe temporaire (facultatif)";
 }
 
 function startNewUserAdmin() {
@@ -621,7 +691,7 @@ function cancelNewUserAdmin() {
 function renderNewUserAdmin() {
   userAdminSelect.disabled = true;
   cancelNewUserAdminButton.hidden = false;
-  userAdminModeLabel.textContent = "Ajout d'un nouvel utilisateur : inscrivez son code, ses coordonnées, son rôle et activez son compte.";
+  userAdminModeLabel.textContent = "Ajout d'un nouvel utilisateur : le code reste le code d'horaire; le courriel sera le nom d'utilisateur; le mot de passe est temporaire.";
   userAdminCode.disabled = false;
   userAdminCode.value = "";
   userAdminName.value = "";
@@ -631,7 +701,7 @@ function renderNewUserAdmin() {
   userAdminActive.checked = true;
   userAdminPassword.value = "";
   userAdminPassword.required = true;
-  userAdminPasswordLabel.textContent = "Mot de passe initial (12 caractères minimum)";
+  userAdminPasswordLabel.textContent = "Mot de passe temporaire initial (12 caractères minimum)";
   userAdminCode.focus();
 }
 
@@ -1904,6 +1974,7 @@ function defaultUsers() {
     phone: "",
     role: "intensiviste",
     active: true,
+    mustChangePassword: false,
   }));
 }
 
@@ -1918,6 +1989,7 @@ function normalizeUsers(users) {
       phone: user.phone || "",
       role: user.role || "intensiviste",
       active: user.active !== false,
+      mustChangePassword: user.mustChangePassword === true || user.must_change_password === true,
     });
   });
   return Array.from(byCode.values()).sort((left, right) => left.name.localeCompare(right.name));
