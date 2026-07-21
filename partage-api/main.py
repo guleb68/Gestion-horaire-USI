@@ -167,7 +167,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -551,6 +551,34 @@ def replace_schedule(year: int, payload: ScheduleReplace, user: CurrentUser) -> 
         audit(connection, user["code"], "schedule.replaced", "schedule", str(year), {"weeks": len(payload.weeks), "assignments": inserted})
         connection.commit()
     return {"year": year, "weeks": len(payload.weeks), "assignments": inserted}
+
+
+@app.delete("/api/admin/schedules/{year}")
+def delete_schedule(year: int, user: CurrentUser) -> dict:
+    require_admin(user)
+    if year < 2020 or year > 2100:
+        raise HTTPException(status_code=400, detail="Annee invalide")
+    with database() as connection:
+        deleted_overrides = connection.execute("DELETE FROM duty_overrides WHERE year = %s", (year,)).rowcount
+        deleted_swaps = connection.execute(
+            """
+            DELETE FROM swap_requests
+            WHERE requested->>'year' = %s
+               OR offered->>'year' = %s
+            """,
+            (str(year), str(year)),
+        ).rowcount
+        deleted_assignments = connection.execute("DELETE FROM schedules WHERE year = %s", (year,)).rowcount
+        audit(
+            connection,
+            user["code"],
+            "schedule.deleted",
+            "schedule",
+            str(year),
+            {"assignments": deleted_assignments, "overrides": deleted_overrides, "swaps": deleted_swaps},
+        )
+        connection.commit()
+    return {"year": year, "assignments": deleted_assignments, "overrides": deleted_overrides, "swaps": deleted_swaps}
 
 
 @app.post("/api/swaps", status_code=status.HTTP_201_CREATED)
