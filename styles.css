@@ -452,7 +452,6 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
   body.printing-annual { page: annual-sheet; background: white; }
   body.printing-annual .topbar,
   body.printing-annual .welcome-card,
-  body.printing-annual #security-notice,
   body.printing-annual .bottom-nav,
   body.printing-annual .app-view:not(#view-annual),
   body.printing-annual #view-annual > .section-heading,
@@ -535,7 +534,6 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
   body.printing-weekly { background: white; }
   body.printing-weekly .topbar,
   body.printing-weekly .welcome-card,
-  body.printing-weekly #security-notice,
   body.printing-weekly .bottom-nav,
   body.printing-weekly .app-view:not(#view-schedule),
   body.printing-weekly #view-schedule > .section-heading,
