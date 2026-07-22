@@ -1228,13 +1228,13 @@ function renderNextShift() {
   const today = startOfDay(new Date());
   const mine = allAssignments()
     .filter((assignment) => assignment.code === CURRENT_USER)
-    .map((assignment) => ({ ...assignment, sortDate: parseFrenchDate(assignment.dayDate) }))
+    .map((assignment) => ({ ...assignment, sortDate: assignmentDate(assignment) }))
     .filter((assignment) => assignment.sortDate && assignment.sortDate >= today)
     .sort((left, right) => {
       return left.sortDate.getTime() - right.sortDate.getTime() || left.weekNumber - right.weekNumber || left.dayIndex - right.dayIndex;
     });
   const next = mine[0];
-  document.getElementById("next-shift-label").textContent = next ? `${next.dayDate} · ${next.sourceTask || next.task}` : "Aucune affectation";
+  document.getElementById("next-shift-label").textContent = next ? `${next.dayDate || formatAnnualDate(next.sortDate)} · ${next.sourceTask || next.task}` : "Aucune affectation";
 }
 
 function renderSwaps() {
@@ -2270,6 +2270,17 @@ function isPastExchangeEntry(entry) {
   const date = parseFrenchDate(entry.dayDate || entry.date);
   if (!date) return false;
   return date < startOfDay(new Date());
+}
+
+function assignmentDate(entry) {
+  const direct = parseFrenchDate(entry?.dayDate || "");
+  if (direct) return startOfDay(direct);
+  const week = findScheduleWeek(entry?.year || state.activeYear, entry?.weekNumber) || entry;
+  const start = weekStartDate(week);
+  if (!start) return null;
+  const date = new Date(start);
+  date.setDate(date.getDate() + Number(entry?.dayIndex || 0));
+  return startOfDay(date);
 }
 
 function weekStartDate(weekEntry) {
