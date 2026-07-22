@@ -141,6 +141,7 @@ const notificationTemplateAdmin = document.getElementById("notification-template
 const notificationTemplateList = document.getElementById("notification-template-list");
 const userAdmin = document.getElementById("user-admin");
 const userAdminModeLabel = document.getElementById("user-admin-mode");
+const userAdminSelectField = document.getElementById("user-admin-select-field");
 const userAdminSelect = document.getElementById("user-admin-select");
 const userAdminCode = document.getElementById("user-admin-code");
 const userAdminName = document.getElementById("user-admin-name");
@@ -660,12 +661,13 @@ function renderUserAdmin() {
 
 function renderSelectedUserAdmin() {
   userAdminMode = "edit";
+  const user = userByCode(userAdminSelect.value) || state.users?.[0] || {};
+  userAdminSelectField.hidden = false;
   userAdminSelect.disabled = false;
   cancelNewUserAdminButton.hidden = true;
   userAdminModeLabel.textContent = user.mustChangePassword
     ? "Modification d'un utilisateur existant. Mot de passe temporaire actif : l'utilisateur devra le changer à sa prochaine connexion."
     : "Modification d'un utilisateur existant.";
-  const user = userByCode(userAdminSelect.value) || state.users?.[0] || {};
   userAdminCode.value = user.code || "";
   userAdminCode.disabled = true;
   userAdminName.value = user.name || "";
@@ -689,6 +691,7 @@ function cancelNewUserAdmin() {
 }
 
 function renderNewUserAdmin() {
+  userAdminSelectField.hidden = true;
   userAdminSelect.disabled = true;
   cancelNewUserAdminButton.hidden = false;
   userAdminModeLabel.textContent = "Ajout d'un nouvel utilisateur : le code reste le code d'horaire; le courriel sera le nom d'utilisateur; le mot de passe est temporaire.";
