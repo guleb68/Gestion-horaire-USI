@@ -85,6 +85,7 @@ def initialize_database() -> None:
                 year integer NOT NULL,
                 week_number integer NOT NULL,
                 week_start date NOT NULL,
+                note text NOT NULL DEFAULT '',
                 task text NOT NULL,
                 doctor_code text NOT NULL REFERENCES users(code),
                 modified_by_swap boolean NOT NULL DEFAULT false,
@@ -129,6 +130,7 @@ def initialize_database() -> None:
             ALTER TABLE schedules DROP CONSTRAINT IF EXISTS schedules_doctor_code_fkey;
             ALTER TABLE duty_overrides DROP CONSTRAINT IF EXISTS duty_overrides_doctor_code_fkey;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;
+            ALTER TABLE schedules ADD COLUMN IF NOT EXISTS note text NOT NULL DEFAULT '';
             """
         )
         bootstrap_admin(connection)
@@ -240,6 +242,7 @@ class ScheduleAssignment(BaseModel):
 class ScheduleWeek(BaseModel):
     weekNumber: int = Field(ge=1, le=53)
     weekStart: date
+    note: str = Field(default="", max_length=500)
     assignments: list[ScheduleAssignment]
 
 
@@ -562,7 +565,7 @@ def schedules(user: CurrentUser, year: int = Query(ge=2020, le=2100)) -> dict:
     with database() as connection:
         weeks = connection.execute(
             """
-            SELECT year, week_number, week_start, task, doctor_code, modified_by_swap
+            SELECT year, week_number, week_start, note, task, doctor_code, modified_by_swap
             FROM schedules WHERE year = %s ORDER BY week_number, task
             """,
             (year,),
@@ -591,10 +594,10 @@ def replace_schedule(year: int, payload: ScheduleReplace, user: CurrentUser) -> 
             for assignment in week.assignments:
                 connection.execute(
                     """
-                    INSERT INTO schedules (year, week_number, week_start, task, doctor_code)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO schedules (year, week_number, week_start, note, task, doctor_code)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     """,
-                    (year, week.weekNumber, week.weekStart, assignment.task, assignment.code.strip().upper()),
+                    (year, week.weekNumber, week.weekStart, week.note.strip(), assignment.task, assignment.code.strip().upper()),
                 )
                 inserted += 1
         audit(connection, user["code"], "schedule.replaced", "schedule", str(year), {"weeks": len(payload.weeks), "assignments": inserted})
