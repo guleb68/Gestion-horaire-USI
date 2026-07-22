@@ -502,7 +502,7 @@ function applyApiSchedule(year, payload) {
         year,
         weekNumber: row.week_number,
         date: formatAnnualDate(new Date(`${row.week_start}T12:00:00`)),
-        note: "",
+        note: row.note || "",
         assignments: [],
       });
     }
@@ -1624,6 +1624,7 @@ async function importScheduleFile(event) {
     await API.replaceSchedule(targetYear, schedule.map((weekEntry) => ({
       weekNumber: weekEntry.weekNumber,
       weekStart: frenchDateToIso(weekEntry.date),
+      note: weekEntry.note || "",
       assignments: weekEntry.assignments.map((assignment) => ({
         task: assignment.task,
         code: assignment.code || (assignment.placeholder === "HDQ" ? "HDQ" : "VACANT"),
@@ -1833,7 +1834,7 @@ function getOrCreateWeek(weeks, weekNumber, date, note) {
 function normalizeHeader(value) {
   const normalized = normalizeSearch(value).replace(/[-_]/g, " ").replace(/\s+/g, " ").trim();
   if (normalized === "sem" || normalized === "semaine" || normalized === "week") return "semaine";
-  if (normalized === "notes" || normalized === "note") return "notes";
+  if (normalized === "notes" || normalized === "note" || normalized.includes("note")) return "notes";
   if (normalized === "tache" || normalized === "task") return "tache";
   if (normalized === "medecin" || normalized === "intensiviste" || normalized === "doctor") return "medecin";
   if (normalized === "code") return "code";

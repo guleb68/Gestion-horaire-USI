@@ -394,16 +394,16 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
 .annual-roster-table thead th:nth-child(6) { background: #f7dfd1; }
 .annual-roster-table thead th:nth-child(7) { background: #d4d4d4; }
 .annual-roster-table th:nth-child(1) { width: 52px; }
-.annual-roster-table th:nth-child(2) { width: 220px; }
-.annual-roster-table th:nth-child(3) { width: 185px; }
-.annual-roster-table th:nth-child(n+4) { width: 96px; }
+.annual-roster-table th:nth-child(2) { width: 145px; }
+.annual-roster-table th:nth-child(3) { width: 210px; }
+.annual-roster-table th:nth-child(n+4) { width: 104px; }
 .annual-roster-table tbody th {
   color: #000;
   background: #fff;
   white-space: nowrap;
 }
-.annual-roster-table tbody td:nth-child(2) { text-align: left; }
-.annual-roster-table tbody td:nth-child(3) { text-align: center; }
+.annual-roster-table tbody td:nth-child(2) { text-align: left; white-space: normal; }
+.annual-roster-table tbody td:nth-child(3) { text-align: center; white-space: normal; }
 .annual-roster-table tbody td.annual-ab { background: #d9f1cf; }
 .annual-roster-table tbody td.annual-cd { background: #c5eefa; }
 .annual-roster-table tbody td.annual-ugb { background: #f7dfd1; }
@@ -518,9 +518,9 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
     page-break-inside: avoid;
   }
   body.printing-annual .annual-roster-table th:nth-child(1) { width: 5%; }
-  body.printing-annual .annual-roster-table th:nth-child(2) { width: 24%; }
-  body.printing-annual .annual-roster-table th:nth-child(3) { width: 20%; }
-  body.printing-annual .annual-roster-table th:nth-child(n+4) { width: 12.75%; }
+  body.printing-annual .annual-roster-table th:nth-child(2) { width: 16%; }
+  body.printing-annual .annual-roster-table th:nth-child(3) { width: 23%; }
+  body.printing-annual .annual-roster-table th:nth-child(n+4) { width: 14%; }
   body.printing-annual .annual-exchange-button {
     white-space: nowrap;
   }
