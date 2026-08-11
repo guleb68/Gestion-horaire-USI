@@ -149,10 +149,6 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
   font-size: .72rem;
   font-weight: 800;
 }
-.status-badge.locked {
-  color: #5f6f79;
-  background: #eef2f4;
-}
 
 .next-shift {
   display: grid;
@@ -206,19 +202,6 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
   border-radius: 18px;
   background: white;
   box-shadow: var(--shadow);
-}
-.weekly-roster-card.past-week {
-  border-color: #cfd9de;
-  background: #f7f9fa;
-}
-.weekly-roster-card.past-week .weekly-table-heading {
-  background: #425967;
-}
-.weekly-roster-card.past-week .roster-table {
-  filter: grayscale(.18);
-}
-.weekly-roster-card.past-week .roster-exchange-cell {
-  color: #667782;
 }
 .weekly-table-heading {
   display: flex;
@@ -280,8 +263,6 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
 .roster-exchange-cell:disabled,
 .annual-exchange-button:disabled {
   cursor: not-allowed;
-  color: var(--muted);
-  opacity: .58;
   text-decoration: none;
 }
 .roster-scroll {
@@ -430,10 +411,6 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
   font-weight: 850;
   box-shadow: inset 0 0 0 3px rgba(154, 100, 23, .42);
 }
-.annual-roster-table tbody tr.annual-past-week > * {
-  color: #61717b;
-  background-color: #f0f3f4 !important;
-}
 .annual-exchange-button {
   display: block;
   width: 100%;
@@ -460,17 +437,6 @@ h2 { margin-bottom: 0; font-size: 1.25rem; }
   margin-top: 2px;
   color: var(--muted);
   font-size: .58rem;
-}
-.past-week-note {
-  display: inline-flex;
-  margin-left: 6px;
-  border-radius: 999px;
-  padding: 2px 6px;
-  color: #5f6f79;
-  background: #e8eef1;
-  font-size: .55rem;
-  font-weight: 850;
-  white-space: nowrap;
 }
 .annual-modified-marker {
   display: inline-block;

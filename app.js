@@ -978,10 +978,10 @@ function renderSchedule() {
     const cells = buildDutyCells(item);
     const mine = cells.some((assignment) => assignment.code === CURRENT_USER);
     return `
-      <article class="weekly-roster-card ${isPastWeekEntry(item) ? "past-week" : ""}" data-week-card="${item.year || state.activeYear}|${item.weekNumber}">
+      <article class="weekly-roster-card" data-week-card="${item.year || state.activeYear}|${item.weekNumber}">
         <div class="weekly-table-heading">
           <div><div class="week-label" data-print-date="${escapeHtml(item.date || "")}">Liste de garde USI · Semaine ${item.weekNumber}</div><div class="date-label">Semaine du ${escapeHtml(item.date || "")}${item.note ? ` · ${escapeHtml(item.note)}` : ""}</div></div>
-          <div class="weekly-heading-badges">${weeklyPdfButton(item)}${isPastWeekEntry(item) ? '<span class="status-badge locked">Semaine passée · verrouillée</span>' : ""}${mine ? '<span class="status-badge accepted">Vous travaillez</span>' : ""}</div>
+          <div class="weekly-heading-badges">${weeklyPdfButton(item)}${mine ? '<span class="status-badge accepted">Vous travaillez</span>' : ""}</div>
         </div>
         <div class="weekly-exchange-bar">
           <div class="weekly-exchange-actions">${weeklyExchangeButtons(item, cells)}</div>
@@ -1005,11 +1005,10 @@ function renderAnnual() {
   annualStatus.textContent = `${sourceLabelForActiveYear()} · Horaire annuel complet ${state.activeYear} · ${schedule.length} semaines. * = tâche modifiée par échange partiel.`;
   const rows = schedule.map((weekEntry) => {
     const byTask = Object.fromEntries(weekEntry.assignments.map((assignment) => [assignment.task, assignment]));
-    const past = isPastWeekEntry(weekEntry);
-    return `<tr class="${past ? "annual-past-week" : ""}">
+    return `<tr>
       <th>${weekEntry.weekNumber}</th>
       <td>${escapeHtml(weekEntry.date || "")}</td>
-      <td>${escapeHtml(weekEntry.note || "")}${past ? '<span class="past-week-note">Verrouillée</span>' : ""}</td>
+      <td>${escapeHtml(weekEntry.note || "")}</td>
       ${ANNUAL_TASK_COLUMNS.map(([task]) => annualTaskCell(byTask[task], task, weekEntry)).join("")}
     </tr>`;
   }).join("") || `<tr><td colspan="7">Aucun horaire annuel disponible pour ${escapeHtml(state.activeYear)}.</td></tr>`;
@@ -1026,9 +1025,8 @@ function annualTaskCell(assignment = {}, task = "", weekEntry = {}) {
   const mine = code === CURRENT_USER;
   const locked = !canExchangeEntry(entry);
   return `<td class="${annualTaskClass(task)}${modified ? " annual-modified" : ""}">
-    <button class="annual-exchange-button ${mine ? "mine" : ""}" data-exchange-action="${mine ? "offer" : "request"}" data-exchange-scope="weekly" data-assignment-key="${escapeHtml(assignmentKey(entry))}" type="button" ${locked ? "disabled" : ""} title="${locked ? "Semaine passée verrouillée" : `${mine ? "Offrir" : "Demander"} toutes les tâches de ${escapeHtml(entry.doctor)} pour la semaine ${weekEntry.weekNumber}`}">
+    <button class="annual-exchange-button ${mine ? "mine" : ""}" data-exchange-action="${mine ? "offer" : "request"}" data-exchange-scope="weekly" data-assignment-key="${escapeHtml(assignmentKey(entry))}" type="button" ${locked ? "disabled" : ""} title="${locked ? "" : `${mine ? "Offrir" : "Demander"} toutes les tâches de ${escapeHtml(entry.doctor)} pour la semaine ${weekEntry.weekNumber}`}">
       ${escapeHtml(label)}${marker}
-      ${locked ? '<small>Verrouillée</small>' : ""}
     </button>
   </td>`;
 }
@@ -1198,8 +1196,8 @@ function weeklyExchangeButtons(weekEntry, cells) {
     const mine = code === CURRENT_USER;
     const entry = buildWeeklyBundle(weekEntry.year || state.activeYear, weekEntry.weekNumber, code);
     const locked = !canExchangeEntry(entry);
-    return `<button class="weekly-exchange-button ${mine ? "mine" : ""}" data-exchange-action="${mine ? "offer" : "request"}" data-exchange-scope="weekly" data-assignment-key="${escapeHtml(assignmentKey(entry))}" type="button" ${locked ? "disabled" : ""} title="${locked ? "Semaine passée verrouillée" : ""}">
-      ${locked ? "Semaine passée · verrouillée" : mine ? `Offrir toutes les tâches de ${escapeHtml(entry.doctor)}` : `Demander toutes les tâches de ${escapeHtml(entry.doctor)}`}
+    return `<button class="weekly-exchange-button ${mine ? "mine" : ""}" data-exchange-action="${mine ? "offer" : "request"}" data-exchange-scope="weekly" data-assignment-key="${escapeHtml(assignmentKey(entry))}" type="button" ${locked ? "disabled" : ""}>
+      ${mine ? `Offrir toutes les tâches de ${escapeHtml(entry.doctor)}` : `Demander toutes les tâches de ${escapeHtml(entry.doctor)}`}
     </button>`;
   }).join("");
 }
@@ -1221,9 +1219,9 @@ function rosterCell(cell) {
   const mine = cell.code === CURRENT_USER;
   const locked = !canExchangeEntry(cell);
   return `<td class="roster-cell ${mine ? "current-user" : ""}">
-    <button class="roster-exchange-cell" data-exchange-action="${mine ? "offer" : "request"}" data-assignment-key="${escapeHtml(assignmentKey(cell))}" type="button" ${locked ? "disabled" : ""} title="${locked ? "Garde passée verrouillée" : ""}">
+    <button class="roster-exchange-cell" data-exchange-action="${mine ? "offer" : "request"}" data-assignment-key="${escapeHtml(assignmentKey(cell))}" type="button" ${locked ? "disabled" : ""}>
       <strong>${escapeHtml(cell.doctor || cell.code)}</strong>
-      <small>${locked ? "Verrouillée" : mine ? "Offrir cette garde" : "Demander cette garde"}</small>
+      <small>${mine ? "Offrir cette garde" : "Demander cette garde"}</small>
     </button>
   </td>`;
 }
