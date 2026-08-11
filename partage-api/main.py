@@ -301,6 +301,7 @@ def assignment_is_none(value: Optional[dict]) -> bool:
 def validate_assignment(connection, assignment: Optional[dict], user: dict, allow_past: bool = False) -> None:
     if assignment_is_none(assignment):
         return
+    del allow_past
     year = assignment.get("year")
     week_number = assignment.get("weekNumber")
     code = assignment_code(assignment)
@@ -310,8 +311,8 @@ def validate_assignment(connection, assignment: Optional[dict], user: dict, allo
     ).fetchone()
     if not week or not week["week_start"]:
         raise HTTPException(status_code=409, detail="Cette semaine n'existe plus dans l'horaire")
-    if not allow_past and user["role"] != "admin" and week["week_start"] + timedelta(days=6) < date.today():
-        raise HTTPException(status_code=403, detail="Les semaines passees ne sont pas echangeables")
+    if week["week_start"] + timedelta(days=6) < date.today():
+        raise HTTPException(status_code=403, detail="Les semaines passees sont verrouillees")
     if assignment.get("scope") == "individual":
         if assignment.get("dutyId") is None or assignment.get("dayIndex") is None:
             raise HTTPException(status_code=400, detail="Garde individuelle incomplete")
@@ -586,11 +587,45 @@ def replace_schedule(year: int, payload: ScheduleReplace, user: CurrentUser) -> 
     if year < 2020 or year > 2100:
         raise HTTPException(status_code=400, detail="Annee invalide")
     with database() as connection:
-        connection.execute("DELETE FROM duty_overrides WHERE year = %s", (year,))
-        connection.execute("DELETE FROM swap_requests WHERE requested->>'year' = %s", (str(year),))
-        connection.execute("DELETE FROM schedules WHERE year = %s", (year,))
+        future_weeks = connection.execute(
+            """
+            SELECT week_number
+            FROM schedules
+            WHERE year = %s
+              AND week_start + interval '6 days' >= CURRENT_DATE
+            """,
+            (year,),
+        ).fetchall()
+        future_week_numbers = [row["week_number"] for row in future_weeks]
+        if future_week_numbers:
+            connection.execute(
+                "DELETE FROM duty_overrides WHERE year = %s AND week_number = ANY(%s)",
+                (year, future_week_numbers),
+            )
+            connection.execute(
+                """
+                DELETE FROM swap_requests
+                WHERE (
+                    requested->>'year' = %s
+                    AND (requested->>'weekNumber')::int = ANY(%s)
+                )
+                   OR (
+                    offered->>'year' = %s
+                    AND (offered->>'weekNumber')::int = ANY(%s)
+                )
+                """,
+                (str(year), future_week_numbers, str(year), future_week_numbers),
+            )
+            connection.execute(
+                "DELETE FROM schedules WHERE year = %s AND week_number = ANY(%s)",
+                (year, future_week_numbers),
+            )
         inserted = 0
+        skipped_past_weeks = 0
         for week in payload.weeks:
+            if week.weekStart + timedelta(days=6) < date.today():
+                skipped_past_weeks += 1
+                continue
             for assignment in week.assignments:
                 connection.execute(
                     """
@@ -600,9 +635,9 @@ def replace_schedule(year: int, payload: ScheduleReplace, user: CurrentUser) -> 
                     (year, week.weekNumber, week.weekStart, week.note.strip(), assignment.task, assignment.code.strip().upper()),
                 )
                 inserted += 1
-        audit(connection, user["code"], "schedule.replaced", "schedule", str(year), {"weeks": len(payload.weeks), "assignments": inserted})
+        audit(connection, user["code"], "schedule.replaced", "schedule", str(year), {"weeks": len(payload.weeks), "assignments": inserted, "skipped_past_weeks": skipped_past_weeks})
         connection.commit()
-    return {"year": year, "weeks": len(payload.weeks), "assignments": inserted}
+    return {"year": year, "weeks": len(payload.weeks) - skipped_past_weeks, "assignments": inserted, "skipped_past_weeks": skipped_past_weeks}
 
 
 @app.delete("/api/admin/schedules/{year}")
@@ -611,26 +646,62 @@ def delete_schedule(year: int, user: CurrentUser) -> dict:
     if year < 2020 or year > 2100:
         raise HTTPException(status_code=400, detail="Annee invalide")
     with database() as connection:
-        deleted_overrides = connection.execute("DELETE FROM duty_overrides WHERE year = %s", (year,)).rowcount
-        deleted_swaps = connection.execute(
+        future_weeks = connection.execute(
             """
-            DELETE FROM swap_requests
-            WHERE requested->>'year' = %s
-               OR offered->>'year' = %s
+            SELECT week_number
+            FROM schedules
+            WHERE year = %s
+              AND week_start + interval '6 days' >= CURRENT_DATE
             """,
-            (str(year), str(year)),
-        ).rowcount
-        deleted_assignments = connection.execute("DELETE FROM schedules WHERE year = %s", (year,)).rowcount
+            (year,),
+        ).fetchall()
+        future_week_numbers = [row["week_number"] for row in future_weeks]
+        if future_week_numbers:
+            deleted_overrides = connection.execute(
+                "DELETE FROM duty_overrides WHERE year = %s AND week_number = ANY(%s)",
+                (year, future_week_numbers),
+            ).rowcount
+            deleted_swaps = connection.execute(
+                """
+                DELETE FROM swap_requests
+                WHERE (
+                    requested->>'year' = %s
+                    AND (requested->>'weekNumber')::int = ANY(%s)
+                )
+                   OR (
+                    offered->>'year' = %s
+                    AND (offered->>'weekNumber')::int = ANY(%s)
+                )
+                """,
+                (str(year), future_week_numbers, str(year), future_week_numbers),
+            ).rowcount
+            deleted_assignments = connection.execute(
+                "DELETE FROM schedules WHERE year = %s AND week_number = ANY(%s)",
+                (year, future_week_numbers),
+            ).rowcount
+        else:
+            deleted_overrides = 0
+            deleted_swaps = 0
+            deleted_assignments = 0
+        locked_past_weeks = connection.execute(
+            """
+            SELECT count(DISTINCT week_number) AS count
+            FROM schedules
+            WHERE year = %s
+              AND week_start + interval '6 days' < CURRENT_DATE
+            """,
+            (year,),
+        ).fetchone()["count"]
         audit(
             connection,
             user["code"],
             "schedule.deleted",
             "schedule",
             str(year),
-            {"assignments": deleted_assignments, "overrides": deleted_overrides, "swaps": deleted_swaps},
+            {"assignments": deleted_assignments, "overrides": deleted_overrides, "swaps": deleted_swaps, "locked_past_weeks": locked_past_weeks},
         )
         connection.commit()
-    return {"year": year, "assignments": deleted_assignments, "overrides": deleted_overrides, "swaps": deleted_swaps}
+    return {"year": year, "assignments": deleted_assignments, "overrides": deleted_overrides, "swaps": deleted_swaps, "locked_past_weeks": locked_past_weeks}
 
 
 @app.post("/api/swaps", status_code=status.HTTP_201_CREATED)
@@ -670,8 +741,8 @@ def direct_swap(payload: SwapCreate, user: CurrentUser) -> dict:
         "requested": requested,
     }
     with database() as connection:
-        validate_assignment(connection, offered, user, allow_past=True)
-        validate_assignment(connection, requested, user, allow_past=True)
+        validate_assignment(connection, offered, user)
+        validate_assignment(connection, requested, user)
         if payload.scope == "weekly":
             apply_weekly_swap(connection, request)
         else:
@@ -720,8 +791,8 @@ def decide_swap(request_id: uuid.UUID, payload: SwapDecision, user: CurrentUser)
         if user["role"] != "admin" and user["code"] != requested_owner:
             raise HTTPException(status_code=403, detail="Vous ne pouvez pas traiter cette demande")
         if payload.decision == "accepted":
-            validate_assignment(connection, request["offered"], user, allow_past=user["role"] == "admin")
-            validate_assignment(connection, request["requested"], user, allow_past=user["role"] == "admin")
+            validate_assignment(connection, request["offered"], user)
+            validate_assignment(connection, request["requested"], user)
             if request["scope"] == "weekly":
                 apply_weekly_swap(connection, request)
             else:
